@@ -1,0 +1,74 @@
+/**
+ * Package Dependencies for Real-time Collaboration
+ * 
+ * Required packages:
+ * npm install socket.io socket.io-client yjs
+ * 
+ * Or add to package.json:
+ */
+
+{
+  "dependencies": {
+    "socket.io": "^4.7.5",
+    "socket.io-client": "^4.7.5",
+    "yjs": "^13.6.14"
+  }
+}
+
+/**
+ * Environment Variables
+ * 
+ * Add to .env.local:
+ * NEXT_PUBLIC_SOCKET_URL=http://localhost:3001
+ */
+
+/**
+ * Next.js Custom Server Setup
+ * 
+ * Create server.js in project root:
+ */
+
+const { createServer } = require('http');
+const { parse } = require('url');
+const next = require('next');
+const { initializeSocketServer } = require('./lib/socket/socketServer');
+
+const dev = process.env.NODE_ENV !== 'production';
+const hostname = 'localhost';
+const port = 3001;
+
+const app = next({ dev, hostname, port });
+const handle = app.getRequestHandler();
+
+app.prepare().then(() => {
+  const server = createServer(async (req, res) => {
+    try {
+      const parsedUrl = parse(req.url, true);
+      await handle(req, res, parsedUrl);
+    } catch (err) {
+      console.error('Error occurred handling', req.url, err);
+      res.statusCode = 500;
+      res.end('internal server error');
+    }
+  });
+
+  // Initialize Socket.io
+  initializeSocketServer(server);
+
+  server.listen(port, (err) => {
+    if (err) throw err;
+    console.log(`> Ready on http://${hostname}:${port}`);
+  });
+});
+
+/**
+ * Update package.json scripts:
+ */
+
+{
+  "scripts": {
+    "dev": "node server.js",
+    "build": "next build",
+    "start": "NODE_ENV=production node server.js"
+  }
+}
