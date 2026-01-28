@@ -25,7 +25,7 @@ export function useSocket(options: UseSocketOptions = {}) {
 
   useEffect(() => {
     // Initialize socket connection
-    const socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001', {
+    const socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000', {
       transports: ['websocket', 'polling'],
       autoConnect: options.autoConnect !== false,
       reconnection: options.reconnection !== false,
@@ -49,7 +49,7 @@ export function useSocket(options: UseSocketOptions = {}) {
     });
 
     socketInstance.on('connect_error', (error) => {
-      console.error('❌ Socket connection error:', error);
+      console.warn('⚠️ Socket connection error (will retry):', error.message);
       setIsConnecting(false);
     });
 

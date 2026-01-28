@@ -48,6 +48,10 @@ export function useYjsProvider({
   useEffect(() => {
     if (!socket || !documentId) return;
 
+    console.log(`\ud83d\udcc4 Joining document room: ${documentId}`);
+    console.log(`  - Socket ID: ${socket.id}`);
+    console.log(`  - User: ${user.name} (${user.id})`);
+
     // Join document room
     socket.emit('join-document', {
       documentId,
@@ -59,10 +63,11 @@ export function useYjsProvider({
       }
     });
 
-    console.log(`📄 Joined Yjs document: ${documentId}`);
+    console.log(`\u2705 Emitted join-document event`);
 
     return () => {
       // Leave document on cleanup
+      console.log(`\ud83d\udeaa Leaving document room: ${documentId}`);
       socket.emit('leave-document', { documentId });
       ydoc.destroy();
     };
@@ -82,6 +87,16 @@ export function useYjsProvider({
         
         setSynced(true);
         setActiveUsers(users);
+        
+        // Check if there's initial content to load
+        const metadata = ydoc.getMap('metadata');
+        const initialContent = metadata.get('initialContent');
+        
+        if (initialContent && typeof initialContent === 'string') {
+          console.log(`📄 Loading ${initialContent.length} characters of initial content from MongoDB`);
+          // The content will be loaded by the TipTap editor when it initializes
+          // We'll pass this through the onSync callback
+        }
         
         if (onSync) {
           onSync(ydoc);

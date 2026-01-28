@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { X, Link2, Check, Globe, Lock, ChevronDown } from 'lucide-react';
+import toast from 'react-hot-toast';
+import Dropdown from '@/app/components/Dropdown';
 
 interface Collaborator {
   _id: string;
@@ -15,6 +17,7 @@ interface Collaborator {
 
 interface ShareModalProps {
   documentId: string;
+  documentTitle?: string;
   isOwner: boolean;
   onClose: () => void;
   currentUserEmail: string;
@@ -25,6 +28,7 @@ interface ShareModalProps {
 
 export default function ShareModal({
   documentId,
+  documentTitle = 'Untitled Document',
   isOwner,
   onClose,
   ownerEmail,
@@ -56,6 +60,23 @@ export default function ShareModal({
     loadCollaborators();
   }, [loadCollaborators]);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (showGeneralDropdown) {
+        setShowGeneralDropdown(false);
+      }
+    };
+
+    if (showGeneralDropdown) {
+      document.addEventListener('click', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [showGeneralDropdown]);
+
   const handleInvite = async () => {
     if (!email.trim() || !isOwner) return;
 
@@ -67,17 +88,19 @@ export default function ShareModal({
         body: JSON.stringify({ email: email.trim(), permission }),
       });
 
+      const data = await response.json();
+
       if (response.ok) {
         setEmail('');
         setPermission('viewer');
         await loadCollaborators();
+        toast.success('Collaborator added successfully');
       } else {
-        const data = await response.json();
-        alert(data.message || 'Failed to share document');
+        toast.error(data.error || data.message || 'Failed to share document');
       }
     } catch (error) {
       console.error('Failed to share:', error);
-      alert('Failed to share document');
+      toast.error('Failed to share document');
     } finally {
       setLoading(false);
     }
@@ -95,9 +118,13 @@ export default function ShareModal({
 
       if (response.ok) {
         await loadCollaborators();
+        toast.success('Permission updated');
+      } else {
+        toast.error('Failed to update permission');
       }
     } catch (error) {
       console.error('Failed to update permission:', error);
+      toast.error('Failed to update permission');
     }
   };
 
@@ -111,9 +138,13 @@ export default function ShareModal({
 
       if (response.ok) {
         await loadCollaborators();
+        toast.success('Collaborator removed');
+      } else {
+        toast.error('Failed to remove collaborator');
       }
     } catch (error) {
       console.error('Failed to remove collaborator:', error);
+      toast.error('Failed to remove collaborator');
     }
   };
 
@@ -121,6 +152,7 @@ export default function ShareModal({
     const link = `${window.location.origin}/document/${documentId}`;
     await navigator.clipboard.writeText(link);
     setCopied(true);
+    toast.success('Link copied to clipboard');
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -141,9 +173,17 @@ export default function ShareModal({
         setGeneralAccess(newVisibility);
         if (newPermission) setGeneralPermission(newPermission);
         setShowGeneralDropdown(false);
+        toast.success(
+          newVisibility === 'public' 
+            ? 'Anyone with the link can now access' 
+            : 'Access restricted to invited people'
+        );
+      } else {
+        toast.error('Failed to update access settings');
       }
     } catch (error) {
       console.error('Failed to update general access:', error);
+      toast.error('Failed to update access settings');
     }
   };
 
@@ -173,20 +213,21 @@ export default function ShareModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-xl w-full max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Share
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-          >
-            <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-          </button>
-        </div>
+    <>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-xl w-full max-h-[90vh] overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              Share: {documentTitle}
+            </h2>
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+            </button>
+          </div>
 
         <div className="overflow-y-auto max-h-[calc(90vh-80px)]">
           {/* Add people section */}
@@ -205,18 +246,16 @@ export default function ShareModal({
                            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
                            disabled:opacity-50 disabled:cursor-not-allowed"
                 />
-                <select
+                <Dropdown
                   value={permission}
-                  onChange={(e) => setPermission(e.target.value as 'editor' | 'viewer')}
+                  onChange={(val) => setPermission(val as 'editor' | 'viewer')}
+                  options={[
+                    { value: 'viewer', label: 'Viewer' },
+                    { value: 'editor', label: 'Editor' }
+                  ]}
                   disabled={loading}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg 
-                           bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-                           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                           disabled:opacity-50"
-                >
-                  <option value="viewer">Viewer</option>
-                  <option value="editor">Editor</option>
-                </select>
+                  className="w-40"
+                />
                 <button
                   onClick={handleInvite}
                   disabled={!email.trim() || loading}
@@ -264,16 +303,15 @@ export default function ShareModal({
                   </div>
                   {isOwner && collab.permission !== 'owner' ? (
                     <div className="flex items-center gap-1">
-                      <select
+                      <Dropdown
                         value={collab.permission}
-                        onChange={(e) => handleUpdatePermission(collab._id, e.target.value)}
-                        className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded
-                                 bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-                                 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      >
-                        <option value="viewer">Viewer</option>
-                        <option value="editor">Editor</option>
-                      </select>
+                        onChange={(val) => handleUpdatePermission(collab._id, val)}
+                        options={[
+                          { value: 'viewer', label: 'Viewer' },
+                          { value: 'editor', label: 'Editor' }
+                        ]}
+                        className="w-32 text-sm"
+                      />
                       <button
                         onClick={() => handleRemoveCollaborator(collab._id)}
                         className="px-2 py-1 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded opacity-0 group-hover:opacity-100 transition-opacity"
@@ -367,16 +405,15 @@ export default function ShareModal({
 
                   {generalAccess === 'public' && (
                     <div className="mt-2">
-                      <select
+                      <Dropdown
                         value={generalPermission}
-                        onChange={(e) => handleUpdateGeneralAccess('public', e.target.value as 'viewer' | 'editor')}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg
-                                 bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-                                 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="viewer">Viewer</option>
-                        <option value="editor">Editor</option>
-                      </select>
+                        onChange={(val) => handleUpdateGeneralAccess('public', val as 'viewer' | 'editor')}
+                        options={[
+                          { value: 'viewer', label: 'Viewer' },
+                          { value: 'editor', label: 'Editor' }
+                        ]}
+                        className="text-sm"
+                      />
                     </div>
                   )}
                 </div>
@@ -408,6 +445,7 @@ export default function ShareModal({
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

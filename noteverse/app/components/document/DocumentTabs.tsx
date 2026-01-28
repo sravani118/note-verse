@@ -218,9 +218,8 @@ export default function DocumentTabs({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm(`Delete tab "${tab.name}"?`)) {
-                          onTabDelete(tab.id);
-                        }
+                        // Direct delete without confirmation for tabs (they're less critical)
+                        onTabDelete(tab.id);
                       }}
                       className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 dark:hover:bg-red-900 rounded transition-opacity z-10"
                       title="Delete tab"

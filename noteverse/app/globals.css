@@ -5,11 +5,17 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --toast-bg: #ffffff;
+  --toast-text: #171717;
+  --toast-border: #e5e7eb;
 }
 
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
+  --toast-bg: #1f2937;
+  --toast-text: #f3f4f6;
+  --toast-border: #374151;
 }
 
 @theme inline {
@@ -31,3 +37,56 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Toast slide down animation */
+@keyframes slideDown {
+  from {
+    transform: translateY(-120px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slideDown {
+  animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* TipTap Editor Styles */
+.ProseMirror {
+  outline: none;
+}
+
+/* Ensure node-view wrappers don't show empty boxes */
+.ProseMirror [data-node-view-wrapper] {
+  display: inline-block;
+  line-height: 0;
+}
+
+/* Make images resizable like Google Docs */
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: block;
+  position: relative;
+}
+
+.ProseMirror img:hover {
+  box-shadow: 0 0 0 2px #4f46e5;
+}
+
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+/* Selected node outline for better UX */
+.ProseMirror .ProseMirror-selectednode {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}

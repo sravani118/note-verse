@@ -3,7 +3,10 @@
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import Link from 'next/link';
+import ThemeToggle from '../components/ThemeToggle';
+import { useTheme } from '../components/ThemeProvider';
 import ProfileHeader from '../components/profile/ProfileHeader';
 import Preferences from '../components/profile/Preferences';
 import CollaborationIdentity from '../components/profile/CollaborationIdentity';
@@ -14,11 +17,13 @@ import DangerZone from '../components/profile/DangerZone';
 export default function ProfilePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const { setTheme } = useTheme();
   
   // User profile state
   const [profile, setProfile] = useState({
     name: '',
     email: '',
+    image: '',
     role: 'Owner',
     displayName: '',
     cursorColor: '#6366F1',
@@ -49,30 +54,124 @@ export default function ProfilePage() {
     timestamp: string;
   }>>([]);
 
-  const [loading, setLoading] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
+  const [loading, setLoading] = useState(true);
 
+  // Fetch profile data on mount
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/login');
+      return;
     }
     
-    if (session?.user) {
-      setProfile(prev => ({
-        ...prev,
-        name: session.user?.name || '',
-        email: session.user?.email || '',
-        displayName: session.user?.name || ''
-      }));
+    if (status === 'authenticated') {
+      fetchProfile(true); // Apply theme on initial load
     }
-  }, [status, session, router]);
+  }, [status, router]);
 
-  if (status === 'loading') {
+  const fetchProfile = async (applyTheme: boolean = false) => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/profile');
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Profile fetch error:', response.status, errorData);
+        throw new Error(errorData.error || 'Failed to fetch profile');
+      }
+
+      const data = await response.json();
+      
+      console.log('Profile data received:', data);
+      
+      setProfile({
+        name: data.name || '',
+        email: data.email || '',
+        image: data.image || '',
+        role: data.role ? data.role.charAt(0).toUpperCase() + data.role.slice(1) : 'Owner',
+        displayName: data.displayName || data.name || '',
+        cursorColor: data.cursorColor || '#6366F1',
+        timeZone: data.timeZone || 'UTC',
+        lastLogin: data.lastLogin || new Date().toISOString()
+      });
+
+      setPreferences(data.preferences || {
+        theme: 'system',
+        fontSize: '14px',
+        fontFamily: 'Inter',
+        lineSpacing: '1.5',
+        autoSave: true
+      });
+      
+      setStats(data.stats || {
+        documentsCreated: 0,
+        documentsShared: 0,
+        lastEditedDocument: 'No documents yet'
+      });
+      
+      setRecentActivity(data.recentActivity || []);
+      
+      // Apply user's saved theme only on initial load
+      if (applyTheme && data.preferences.theme) {
+        setTheme(data.preferences.theme);
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      toast.error('Failed to load profile data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateProfile = async (updates: any) => {
+    try {
+      console.log('Updating profile with:', updates);
+      
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+          throw new Error(`Server error: ${response.status} ${response.statusText}`);
+        }
+        
+        console.error('Profile update error:', response.status, errorData);
+        
+        // Show detailed error message
+        const errorMessage = errorData.details 
+          ? `${errorData.error}: ${errorData.details}`
+          : errorData.error || 'Failed to update profile';
+          
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      toast.success('Profile updated successfully');
+      return data;
+    } catch (error: any) {
+      console.error('Error updating profile:', error);
+      console.error('Error stack:', error.stack);
+      
+      // Show user-friendly error message
+      const userMessage = error.message || 'Failed to update profile. Please try again.';
+      toast.error(userMessage);
+      
+      throw error;
+    }
+  };
+
+  if (status === 'loading' || loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading profile...</p>
+          <p className="text-gray-600 dark:text-gray-400">Loading profile...</p>
         </div>
       </div>
     );
@@ -84,46 +183,163 @@ export default function ProfilePage() {
 
   // Handler functions
   const handleNameChange = async (name: string) => {
+    // Client-side validation
+    if (!name || name.trim().length === 0) {
+      toast.error('Name cannot be empty');
+      return;
+    }
+    if (name.length > 100) {
+      toast.error('Name cannot exceed 100 characters');
+      return;
+    }
+    
     setProfile({ ...profile, name });
-    // TODO: API call to update name
-    showSaveMessage('Name updated successfully!');
+    try {
+      await updateProfile({ name: name.trim() });
+      // Refresh profile data to ensure consistency
+      await fetchProfile(false);
+    } catch (error) {
+      // Error already handled in updateProfile
+      // Revert the local state
+      await fetchProfile(false);
+    }
   };
 
   const handleAvatarChange = async (file: File) => {
-    // TODO: Upload avatar and update profile
-    showSaveMessage('Avatar updated successfully!');
+    try {
+      // For now, we'll use a placeholder URL
+      // In production, upload to cloud storage (S3, Cloudinary, etc.)
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const imageUrl = reader.result as string;
+        await updateProfile({ image: imageUrl });
+        toast.success('Profile photo updated successfully');
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      toast.error('Failed to update profile photo');
+    }
   };
-
+  const handleAvatarDelete = async () => {
+    try {
+      await updateProfile({ image: null });
+      setProfile({ ...profile, image: '' });
+      toast.success('Profile photo deleted successfully');
+      await fetchProfile(false); // Don't reapply theme
+    } catch (error) {
+      toast.error('Failed to delete profile photo');
+    }
+  };
   const handlePreferencesChange = async (newPreferences: typeof preferences) => {
     setPreferences(newPreferences);
-    // TODO: API call to save preferences
-    showSaveMessage('Preferences saved!');
-  };
-
-  const handlePasswordChange = async (currentPassword: string, newPassword: string) => {
-    // TODO: API call to change password
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        showSaveMessage('Password changed successfully!');
-        resolve();
-      }, 1000);
+    await updateProfile({
+      theme: newPreferences.theme,
+      fontSize: newPreferences.fontSize,
+      fontFamily: newPreferences.fontFamily,
+      lineSpacing: newPreferences.lineSpacing,
+      autoSave: newPreferences.autoSave
     });
   };
 
-  const handleExportData = () => {
-    // TODO: Generate and download user data export
-    alert('Exporting your data...');
+  const handleDisplayNameChange = async (displayName: string) => {
+    // Client-side validation
+    if (displayName && displayName.length > 100) {
+      toast.error('Display name cannot exceed 100 characters');
+      return;
+    }
+    
+    setProfile({ ...profile, displayName });
+    try {
+      await updateProfile({ displayName });
+      await fetchProfile(false);
+    } catch (error) {
+      await fetchProfile(false);
+    }
   };
 
-  const handleDeleteAccount = () => {
-    // TODO: API call to delete account
-    alert('Account deletion initiated. You will be logged out.');
-    router.push('/');
+  const handleCursorColorChange = async (cursorColor: string) => {
+    // Client-side validation for hex color
+    if (cursorColor && !/^#[0-9A-F]{6}$/i.test(cursorColor)) {
+      toast.error('Invalid color format. Use hex format like #6366F1');
+      return;
+    }
+    
+    setProfile({ ...profile, cursorColor });
+    try {
+      await updateProfile({ cursorColor });
+      await fetchProfile(false);
+    } catch (error) {
+      await fetchProfile(false);
+    }
   };
 
-  const showSaveMessage = (message: string) => {
-    setSaveMessage(message);
-    setTimeout(() => setSaveMessage(''), 3000);
+  const handleTimeZoneChange = async (timeZone: string) => {
+    setProfile({ ...profile, timeZone });
+    await updateProfile({ timeZone });
+  };
+
+  const handlePasswordChange = async (currentPassword: string, newPassword: string) => {
+    try {
+      const response = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to change password');
+      }
+
+      toast.success('Password changed successfully');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to change password');
+      throw error;
+    }
+  };
+
+  const handleExportData = async () => {
+    try {
+      toast.loading('Exporting your data...');
+      const response = await fetch('/api/profile/export');
+      
+      if (!response.ok) {
+        throw new Error('Failed to export data');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `noteverse-data-${new Date().toISOString()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast.dismiss();
+      toast.success('Data exported successfully');
+    } catch (error) {
+      toast.dismiss();
+      toast.error('Failed to export data');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    try {
+      const response = await fetch('/api/profile', {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete account');
+      }
+
+      toast.success('Account deleted successfully');
+      router.push('/');
+    } catch (error) {
+      toast.error('Failed to delete account');
+    }
   };
 
   return (
@@ -150,21 +366,11 @@ export default function ProfilePage() {
               </svg>
               Back to Dashboard
             </Link>
+
+            <ThemeToggle />
           </div>
         </div>
       </header>
-
-      {/* Save Message Toast */}
-      {saveMessage && (
-        <div className="fixed top-20 right-6 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            {saveMessage}
-          </div>
-        </div>
-      )}
 
       {/* Main Content */}
       <main className="max-w-5xl mx-auto px-6 py-12">
@@ -178,8 +384,10 @@ export default function ProfilePage() {
             name={profile.name}
             email={profile.email}
             role={profile.role}
+            avatarUrl={profile.image}
             onNameChange={handleNameChange}
             onAvatarChange={handleAvatarChange}
+            onAvatarDelete={handleAvatarDelete}
           />
 
           <Preferences
@@ -191,9 +399,9 @@ export default function ProfilePage() {
             displayName={profile.displayName}
             cursorColor={profile.cursorColor}
             timeZone={profile.timeZone}
-            onDisplayNameChange={(name) => setProfile({ ...profile, displayName: name })}
-            onCursorColorChange={(color) => setProfile({ ...profile, cursorColor: color })}
-            onTimeZoneChange={(tz) => setProfile({ ...profile, timeZone: tz })}
+            onDisplayNameChange={handleDisplayNameChange}
+            onCursorColorChange={handleCursorColorChange}
+            onTimeZoneChange={handleTimeZoneChange}
           />
 
           <SecuritySettings

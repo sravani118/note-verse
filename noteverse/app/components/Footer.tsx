@@ -4,9 +4,9 @@ import Link from 'next/link';
 
 export default function Footer() {
   return (
-    <footer className="bg-gray-900 text-gray-300">
+    <footer className="bg-gray-900 dark:bg-black text-gray-300 dark:text-gray-400">
       {/* CTA Section */}
-      <div className="border-b border-gray-800">
+      <div className="border-b border-gray-800 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 py-16 text-center">
           <div className="inline-flex items-center gap-2 bg-indigo-500/10 text-indigo-400 px-4 py-2 rounded-full text-sm font-medium mb-6">
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -17,7 +17,7 @@ export default function Footer() {
           <h2 className="text-4xl lg:text-5xl font-bold text-white mb-4">
             Start collaborating instantly
           </h2>
-          <p className="text-xl text-gray-400 mb-8 max-w-2xl mx-auto">
+          <p className="text-xl text-gray-400 dark:text-gray-500 mb-8 max-w-2xl mx-auto">
             Join thousands of teams already using NoteVerse to collaborate better. No credit card required.
           </p>
           <button className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-8 py-3 rounded-lg hover:shadow-xl hover:scale-105 transition-all duration-200 font-semibold inline-flex items-center gap-2">
@@ -33,19 +33,19 @@ export default function Footer() {
               <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
-              <span className="text-gray-400">Free forever plan</span>
+              <span className="text-gray-400 dark:text-gray-500">Free forever plan</span>
             </div>
             <div className="flex items-center gap-2">
               <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
-              <span className="text-gray-400">No setup required</span>
+              <span className="text-gray-400 dark:text-gray-500">No setup required</span>
             </div>
             <div className="flex items-center gap-2">
               <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
-              <span className="text-gray-400">Instant access</span>
+              <span className="text-gray-400 dark:text-gray-500">Instant access</span>
             </div>
           </div>
         </div>
@@ -64,7 +64,7 @@ export default function Footer() {
               </div>
               <span className="text-xl font-bold text-white">NoteVerse</span>
             </Link>
-            <p className="text-gray-400 text-sm leading-relaxed">
+            <p className="text-gray-400 dark:text-gray-500 text-sm leading-relaxed">
               Real-time collaborative note-taking for modern teams.
             </p>
             <div className="flex items-center gap-4">
@@ -121,8 +121,8 @@ export default function Footer() {
         </div>
 
         {/* Copyright */}
-        <div className="mt-12 pt-8 border-t border-gray-800 text-center">
-          <p className="text-gray-400 text-sm">
+        <div className="mt-12 pt-8 border-t border-gray-800 dark:border-gray-700 text-center">
+          <p className="text-gray-400 dark:text-gray-500 text-sm">
             © 2024 NoteVerse. All rights reserved
           </p>
         </div>

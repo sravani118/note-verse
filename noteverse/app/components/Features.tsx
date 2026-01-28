@@ -71,15 +71,15 @@ export default function Features() {
   ];
 
   return (
-    <section id="features" className="py-20 px-6 lg:px-8 bg-gradient-to-b from-white to-gray-50">
+    <section id="features" className="py-20 px-6 lg:px-8 bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
       <div className="max-w-7xl mx-auto">
         {/* Section Header */}
         <div className="text-center mb-16">
-          <p className="text-indigo-600 font-semibold text-sm uppercase tracking-wide mb-3">FEATURES</p>
-          <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
+          <p className="text-indigo-600 dark:text-indigo-400 font-semibold text-sm uppercase tracking-wide mb-3">FEATURES</p>
+          <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white mb-4">
             Everything you need to collaborate
           </h2>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
             Powerful features designed to make your team more productive and your notes more organized.
           </p>
         </div>
@@ -89,15 +89,15 @@ export default function Features() {
           {features.map((feature, index) => (
             <div
               key={index}
-              className="bg-white rounded-2xl p-8 border border-gray-200 hover:shadow-xl hover:border-indigo-200 transition-all duration-300 group"
+              className="bg-white dark:bg-gray-800 rounded-2xl p-8 border border-gray-200 dark:border-gray-700 hover:shadow-xl hover:border-indigo-200 dark:hover:border-indigo-800 transition-all duration-300 group"
             >
-              <div className={`${feature.bgColor} ${feature.iconColor} w-14 h-14 rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300`}>
+              <div className={`${feature.bgColor} dark:bg-opacity-20 ${feature.iconColor} w-14 h-14 rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300`}>
                 {feature.icon}
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
                 {feature.title}
               </h3>
-              <p className="text-gray-600 leading-relaxed">
+              <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
                 {feature.description}
               </p>
             </div>

@@ -98,6 +98,13 @@ export async function GET(
         } : null,
         visibility: document.visibility || 'restricted',
         publicPermission: document.publicPermission || 'viewer',
+        settings: {
+          chatEnabled: document.chatEnabled !== false,
+          defaultFont: document.defaultFont || 'Arial',
+          defaultFontSize: document.defaultFontSize || '14',
+          pageWidth: document.pageWidth || 'normal',
+          spellCheck: document.spellCheck !== false
+        },
         createdAt: document.createdAt,
         updatedAt: document.updatedAt,
         wordCount: document.wordCount || 0,
@@ -280,7 +287,7 @@ export async function DELETE(
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session?.user?.id) {
+    if (!session?.user?.email) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -290,27 +297,53 @@ export async function DELETE(
     const { db } = await connectToDatabase();
     const { id: documentId } = await params;
 
-    // Validate ObjectId
-    if (!ObjectId.isValid(documentId)) {
+    // Find the user
+    const user = await db.collection('users').findOne({
+      email: session.user.email
+    });
+
+    if (!user) {
       return NextResponse.json(
-        { error: 'Invalid document ID' },
-        { status: 400 }
+        { error: 'User not found' },
+        { status: 404 }
       );
     }
 
-    const userId = new ObjectId(session.user.id);
-    const docObjectId = new ObjectId(documentId);
-
-    // Check if user is owner
-    const document = await db.collection('documents').findOne({
-      _id: docObjectId,
-      owner: userId
-    });
+    // Handle both MongoDB ObjectId and custom document IDs
+    let document;
+    let docObjectId: ObjectId;
+    if (ObjectId.isValid(documentId)) {
+      // Standard MongoDB ObjectId
+      docObjectId = new ObjectId(documentId);
+      document = await db.collection('documents').findOne({
+        _id: docObjectId
+      });
+    } else {
+      // Custom string ID (e.g., doc-1769406684982-dkluhj1r6)
+      document = await db.collection('documents').findOne({
+        customId: documentId
+      });
+      if (!document) {
+        return NextResponse.json(
+          { error: 'Document not found' },
+          { status: 404 }
+        );
+      }
+      docObjectId = document._id;
+    }
 
     if (!document) {
       return NextResponse.json(
-        { error: 'Document not found or access denied' },
+        { error: 'Document not found' },
         { status: 404 }
+      );
+    }
+
+    // Check if user is owner
+    if (!document.owner.equals(user._id)) {
+      return NextResponse.json(
+        { error: 'Only the owner can delete this document' },
+        { status: 403 }
       );
     }
 
