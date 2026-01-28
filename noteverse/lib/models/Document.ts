@@ -28,6 +28,13 @@ export interface IDocument extends MongooseDocument {
   visibility: 'restricted' | 'public'; // Restricted or Anyone with the link
   publicPermission: 'viewer' | 'editor'; // Permission for public access
   
+  // Document Settings - Editor Preferences
+  chatEnabled: boolean; // Enable/disable document chat
+  defaultFont: string; // Default font family for this document
+  defaultFontSize: string; // Default font size
+  pageWidth: 'normal' | 'wide'; // Page width preference
+  spellCheck: boolean; // Enable spell check
+  
   // Rich content metadata
   wordCount: number;
   characterCount: number;
@@ -128,6 +135,31 @@ const DocumentSchema = new Schema<IDocument>(
       type: String,
       enum: ['viewer', 'editor'],
       default: 'viewer'
+    },
+    
+    // Document Settings - Editor Preferences
+    chatEnabled: {
+      type: Boolean,
+      default: true
+    },
+    defaultFont: {
+      type: String,
+      default: 'Arial',
+      trim: true
+    },
+    defaultFontSize: {
+      type: String,
+      default: '14',
+      trim: true
+    },
+    pageWidth: {
+      type: String,
+      enum: ['normal', 'wide'],
+      default: 'normal'
+    },
+    spellCheck: {
+      type: Boolean,
+      default: true
     },
     
     // Rich content metadata

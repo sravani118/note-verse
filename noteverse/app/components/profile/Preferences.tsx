@@ -1,5 +1,8 @@
 'use client';
 
+import { useTheme } from '../ThemeProvider';
+import Dropdown from '@/app/components/Dropdown';
+
 interface PreferencesProps {
   preferences: {
     theme: 'light' | 'dark' | 'system';
@@ -12,8 +15,18 @@ interface PreferencesProps {
 }
 
 export default function Preferences({ preferences, onPreferencesChange }: PreferencesProps) {
+  const { theme: currentTheme, setTheme } = useTheme();
+  
   const updatePreference = (key: string, value: any) => {
-    onPreferencesChange({ ...preferences, [key]: value });
+    const newPreferences = { ...preferences, [key]: value };
+    
+    // If changing theme, update the ThemeProvider immediately
+    if (key === 'theme') {
+      setTheme(value);
+    }
+    
+    // Always call the parent handler to persist to database
+    onPreferencesChange(newPreferences);
   };
 
   return (
@@ -61,46 +74,46 @@ export default function Preferences({ preferences, onPreferencesChange }: Prefer
         {/* Font Size */}
         <div>
           <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Editor Font Size</label>
-          <select
+          <Dropdown
             value={preferences.fontSize}
-            onChange={(e) => updatePreference('fontSize', e.target.value)}
-            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-          >
-            <option value="12px">Small (12px)</option>
-            <option value="14px">Medium (14px)</option>
-            <option value="16px">Large (16px)</option>
-            <option value="18px">Extra Large (18px)</option>
-          </select>
+            onChange={(val) => updatePreference('fontSize', val)}
+            options={[
+              { value: '12px', label: 'Small (12px)' },
+              { value: '14px', label: 'Medium (14px)' },
+              { value: '16px', label: 'Large (16px)' },
+              { value: '18px', label: 'Extra Large (18px)' }
+            ]}
+          />
         </div>
 
         {/* Font Family */}
         <div>
           <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Editor Font Family</label>
-          <select
+          <Dropdown
             value={preferences.fontFamily}
-            onChange={(e) => updatePreference('fontFamily', e.target.value)}
-            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-          >
-            <option value="Inter">Inter</option>
-            <option value="Roboto">Roboto</option>
-            <option value="Monaco">Monaco</option>
-            <option value="Courier New">Courier New</option>
-            <option value="Georgia">Georgia</option>
-          </select>
+            onChange={(val) => updatePreference('fontFamily', val)}
+            options={[
+              { value: 'Inter', label: 'Inter' },
+              { value: 'Roboto', label: 'Roboto' },
+              { value: 'Monaco', label: 'Monaco' },
+              { value: 'Courier New', label: 'Courier New' },
+              { value: 'Georgia', label: 'Georgia' }
+            ]}
+          />
         </div>
 
         {/* Line Spacing */}
         <div>
           <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Line Spacing</label>
-          <select
+          <Dropdown
             value={preferences.lineSpacing}
-            onChange={(e) => updatePreference('lineSpacing', e.target.value)}
-            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-          >
-            <option value="1">Tight (1.0)</option>
-            <option value="1.5">Normal (1.5)</option>
-            <option value="2">Relaxed (2.0)</option>
-          </select>
+            onChange={(val) => updatePreference('lineSpacing', val)}
+            options={[
+              { value: '1', label: 'Tight (1.0)' },
+              { value: '1.5', label: 'Normal (1.5)' },
+              { value: '2', label: 'Loose (2.0)' }
+            ]}
+          />
         </div>
 
         {/* Auto Save Toggle */}

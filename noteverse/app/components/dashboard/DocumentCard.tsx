@@ -12,6 +12,8 @@ interface DocumentCardProps {
   collaborators?: Array<{ name: string; avatar?: string }>;
   isShared?: boolean;
   onDelete: (id: string) => void;
+  onDuplicate?: (id: string) => void;
+  onShare?: (id: string) => void;
 }
 
 export default function DocumentCard({
@@ -22,7 +24,9 @@ export default function DocumentCard({
   updatedAt,
   collaborators = [],
   isShared = false,
-  onDelete
+  onDelete,
+  onDuplicate,
+  onShare
 }: DocumentCardProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -32,9 +36,39 @@ export default function DocumentCard({
     setShowDeleteModal(false);
   };
 
+  const handleDuplicate = () => {
+    if (onDuplicate) {
+      onDuplicate(id);
+      setShowMenu(false);
+    }
+  };
+
+  const handleShare = () => {
+    if (onShare) {
+      onShare(id);
+      setShowMenu(false);
+    }
+  };
+
+  /**
+   * Strip HTML tags and decode entities from content for clean preview
+   * Removes <p>, </p>, and other HTML tags that shouldn't display
+   */
+  const stripHtmlTags = (html: string): string => {
+    // Remove HTML tags
+    const withoutTags = html.replace(/<[^>]*>/g, ' ');
+    // Decode HTML entities
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = withoutTags;
+    // Clean up extra whitespace
+    return textarea.value.replace(/\s+/g, ' ').trim();
+  };
+
   const truncateContent = (text: string, maxLength: number = 120) => {
-    if (text.length <= maxLength) return text;
-    return text.slice(0, maxLength) + '...';
+    // First strip HTML tags
+    const cleanText = stripHtmlTags(text);
+    if (cleanText.length <= maxLength) return cleanText;
+    return cleanText.slice(0, maxLength) + '...';
   };
 
   return (
@@ -78,11 +112,13 @@ export default function DocumentCard({
                     Open
                   </Link>
                   <button
+                    onClick={handleDuplicate}
                     className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
                     Duplicate
                   </button>
                   <button
+                    onClick={handleShare}
                     className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
                     Share

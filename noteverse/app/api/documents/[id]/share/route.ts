@@ -35,14 +35,21 @@ export async function GET(
 
     // Find document by MongoDB ObjectId or custom ID
     let document;
+    let docObjectId: ObjectId;
+    
     if (ObjectId.isValid(documentId)) {
+      docObjectId = new ObjectId(documentId);
       document = await db.collection('documents').findOne({
-        _id: new ObjectId(documentId)
+        _id: docObjectId
       });
     } else {
       document = await db.collection('documents').findOne({
         customId: documentId
       });
+      if (!document) {
+        return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+      }
+      docObjectId = document._id;
     }
 
     if (!document) {
@@ -58,11 +65,37 @@ export async function GET(
       isOwner = ownerUser?.email === session.user.email;
     }
 
-    // For now, return empty collaborators list since DocumentShare uses Mongoose
-    // This will be enhanced when share functionality is fully implemented
+    // Fetch all shares for this document
+    const shares = await db.collection('documentshares')
+      .find({ documentId: docObjectId.toString() })
+      .toArray();
+
+    // Populate shared user details
+    const collaborators = await Promise.all(
+      shares.map(async (share) => {
+        let sharedWithUser = null;
+        if (share.sharedWith) {
+          sharedWithUser = await db.collection('users').findOne({
+            _id: new ObjectId(share.sharedWith)
+          });
+        }
+
+        return {
+          _id: share._id.toString(),
+          sharedWithEmail: share.sharedWithEmail,
+          permission: share.permission,
+          sharedWith: sharedWithUser ? {
+            name: sharedWithUser.name,
+            email: sharedWithUser.email
+          } : null,
+          createdAt: share.createdAt
+        };
+      })
+    );
+
     return NextResponse.json({
-      collaborators: [],
-      shares: [],
+      collaborators,
+      shares: collaborators, // Keep both for compatibility
       isOwner,
     });
   } catch (error) {
@@ -88,11 +121,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Connect to MongoDB
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(process.env.MONGODB_URI as string);
-    }
-
+    const { db } = await connectToDatabase();
     const { id: documentId } = await params;
     const { email, permission } = await request.json();
 
@@ -104,25 +133,46 @@ export async function POST(
       );
     }
 
-    if (!['viewer', 'editor', 'owner'].includes(permission)) {
+    if (!['viewer', 'editor'].includes(permission)) {
       return NextResponse.json(
-        { error: 'Invalid permission. Must be "viewer", "editor", or "owner"' },
+        { error: 'Invalid permission. Must be "viewer" or "editor"' },
         { status: 400 }
       );
     }
 
-    // Check if user is the owner
-    const user = await User.findOne({ email: session.user.email });
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    // Find document
+    let document;
+    let docObjectId: ObjectId;
+    
+    if (ObjectId.isValid(documentId)) {
+      docObjectId = new ObjectId(documentId);
+      document = await db.collection('documents').findOne({
+        _id: docObjectId
+      });
+    } else {
+      document = await db.collection('documents').findOne({
+        customId: documentId
+      });
+      if (!document) {
+        return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+      }
+      docObjectId = document._id;
     }
 
-    const document = await Document.findById(documentId);
     if (!document) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
-    const isOwner = document.owner?.toString() === user._id.toString();
+    // Check if user is the owner
+    const user = await db.collection('users').findOne({
+      email: session.user.email
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const isOwner = document.owner?.equals(user._id);
     if (!isOwner) {
       return NextResponse.json(
         { error: 'Only the owner can share this document' },
@@ -139,8 +189,8 @@ export async function POST(
     }
 
     // Check if already shared
-    const existingShare = await DocumentShare.findOne({
-      documentId,
+    const existingShare = await db.collection('documentshares').findOne({
+      documentId: docObjectId.toString(),
       sharedWithEmail: email.toLowerCase(),
     });
 
@@ -152,26 +202,33 @@ export async function POST(
     }
 
     // Find the recipient user (if they exist)
-    const recipientUser = await User.findOne({ email: email.toLowerCase() });
+    const recipientUser = await db.collection('users').findOne({
+      email: email.toLowerCase()
+    });
 
     // Create share record
-    const share = await DocumentShare.create({
-      documentId,
+    const shareDoc = {
+      documentId: docObjectId.toString(),
       sharedBy: user._id,
       sharedWith: recipientUser?._id || null,
       sharedWithEmail: email.toLowerCase(),
       permission,
-    });
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
 
-    // Populate the share before returning
-    await share.populate('sharedWith', 'name email');
-
-    // TODO: Send email notification to the recipient
-    // This would be implemented with an email service like SendGrid or Resend
+    const result = await db.collection('documentshares').insertOne(shareDoc);
 
     return NextResponse.json({
       message: 'Document shared successfully',
-      share: share.toObject(),
+      share: {
+        _id: result.insertedId.toString(),
+        ...shareDoc,
+        sharedWith: recipientUser ? {
+          name: recipientUser.name,
+          email: recipientUser.email
+        } : null
+      },
     });
   } catch (error) {
     console.error('Error sharing document:', error);

@@ -13,13 +13,19 @@
 
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Underline from '@tiptap/extension-underline';
-import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Collaboration from '@tiptap/extension-collaboration';
+import Underline from '@tiptap/extension-underline';
+import Link from '@tiptap/extension-link';
+import { TextStyle } from '@tiptap/extension-text-style';
+import { Color } from '@tiptap/extension-color';
+import Highlight from '@tiptap/extension-highlight';
+import { FontFamily } from '@tiptap/extension-font-family';
+import FontSize from 'tiptap-extension-font-size';
+import { ResizableImageExtension } from '../editor/ResizableImageExtension';
 // import CollaborationCursor from '@tiptap/extension-collaboration-cursor'; // Version conflict - to be added later
 import * as Y from 'yjs';
 import { useEffect, useRef, useMemo } from 'react';
@@ -49,17 +55,12 @@ export default function TipTapEditor({ ydoc, currentUser, onReady, readOnly = fa
     const exts = [
       // StarterKit without history - Collaboration provides history
       StarterKit.configure({
-        // @ts-ignore - history option exists but not in type definition
-        history: false,
-      }),
-      // Add extensions not included in StarterKit
-      Underline,
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: {
-          class: 'text-indigo-600 underline cursor-pointer hover:text-indigo-800',
+        dropcursor: {
+          color: currentUser.cursorColor,
+          width: 2,
         },
       }),
+      // Add extensions not included in StarterKit
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
@@ -69,6 +70,33 @@ export default function TipTapEditor({ ydoc, currentUser, onReady, readOnly = fa
       }),
       Placeholder.configure({
         placeholder: 'Start writing your notes here…',
+      }),
+      // Text formatting extensions
+      Underline,
+      TextStyle, // Required for Color and FontFamily to work
+      Color, // Text color
+      Highlight.configure({ // Highlight/background color
+        multicolor: true,
+      }),
+      FontFamily.configure({
+        types: ['textStyle'], // Apply to textStyle marks
+      }),
+      FontSize,
+      // Link extension
+      Link.configure({
+        openOnClick: true,
+        autolink: true,
+        linkOnPaste: true,
+        HTMLAttributes: {
+          class: 'text-indigo-600 dark:text-indigo-400 underline cursor-pointer hover:text-indigo-800 dark:hover:text-indigo-300',
+          target: '_blank',
+          rel: 'noopener noreferrer',
+        },
+      }),
+      // Resizable Image extension
+      ResizableImageExtension.configure({
+        inline: true,
+        allowBase64: true,
       }),
     ];
 
@@ -101,7 +129,7 @@ export default function TipTapEditor({ ydoc, currentUser, onReady, readOnly = fa
   const editor = useEditor({
     immediatelyRender: false,
     shouldRerenderOnTransaction: false,
-    extensions,
+    extensions: extensions as any,
     editable: !readOnly, // Make editor non-editable if readOnly is true
     editorProps: {
       attributes: {

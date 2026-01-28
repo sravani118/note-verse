@@ -9,10 +9,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import mongoose from 'mongoose';
-import Document from '@/lib/models/Document';
-import DocumentShare from '@/lib/models/DocumentShare';
-import User from '@/lib/models/User';
+import { connectToDatabase } from '@/lib/mongodb';
+import { ObjectId } from 'mongodb';
 
 /**
  * PATCH /api/documents/[id]/share/[shareId]
@@ -28,35 +26,40 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Connect to MongoDB
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(process.env.MONGODB_URI as string);
-    }
-
+    const { db } = await connectToDatabase();
     const { id: documentId, shareId } = await params;
     const { permission } = await request.json();
 
     // Validate permission
-    if (!permission || !['viewer', 'editor', 'owner'].includes(permission)) {
+    if (!permission || !['viewer', 'editor'].includes(permission)) {
       return NextResponse.json(
-        { error: 'Invalid permission. Must be "viewer", "editor", or "owner"' },
+        { error: 'Invalid permission. Must be "viewer" or "editor"' },
         { status: 400 }
       );
     }
 
-    // Check if user is the owner
-    const user = await User.findOne({ email: session.user.email });
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    // Find document and check ownership
+    let document;
+    if (ObjectId.isValid(documentId)) {
+      document = await db.collection('documents').findOne({
+        _id: new ObjectId(documentId)
+      });
+    } else {
+      document = await db.collection('documents').findOne({
+        customId: documentId
+      });
     }
 
-    const document = await Document.findById(documentId);
     if (!document) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
-    const isOwner = document.owner?.toString() === user._id.toString();
-    if (!isOwner) {
+    // Check if user is owner
+    const user = await db.collection('users').findOne({
+      email: session.user.email
+    });
+
+    if (!user || !document.owner.equals(user._id)) {
       return NextResponse.json(
         { error: 'Only the owner can modify permissions' },
         { status: 403 }
@@ -64,19 +67,18 @@ export async function PATCH(
     }
 
     // Update the share
-    const share = await DocumentShare.findOneAndUpdate(
-      { _id: shareId, documentId },
-      { permission },
-      { new: true }
-    ).populate('sharedWith', 'name email');
+    const result = await db.collection('documentshares').updateOne(
+      { _id: new ObjectId(shareId) },
+      { $set: { permission, updatedAt: new Date() } }
+    );
 
-    if (!share) {
+    if (result.matchedCount === 0) {
       return NextResponse.json({ error: 'Share not found' }, { status: 404 });
     }
 
     return NextResponse.json({
+      success: true,
       message: 'Permission updated successfully',
-      share: share.toObject(),
     });
   } catch (error) {
     console.error('Error updating permission:', error);
@@ -101,26 +103,31 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Connect to MongoDB
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(process.env.MONGODB_URI as string);
-    }
-
+    const { db } = await connectToDatabase();
     const { id: documentId, shareId } = await params;
 
-    // Check if user is the owner
-    const user = await User.findOne({ email: session.user.email });
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    // Find document and check ownership
+    let document;
+    if (ObjectId.isValid(documentId)) {
+      document = await db.collection('documents').findOne({
+        _id: new ObjectId(documentId)
+      });
+    } else {
+      document = await db.collection('documents').findOne({
+        customId: documentId
+      });
     }
 
-    const document = await Document.findById(documentId);
     if (!document) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
-    const isOwner = document.owner?.toString() === user._id.toString();
-    if (!isOwner) {
+    // Check if user is owner
+    const user = await db.collection('users').findOne({
+      email: session.user.email
+    });
+
+    if (!user || !document.owner.equals(user._id)) {
       return NextResponse.json(
         { error: 'Only the owner can remove collaborators' },
         { status: 403 }
@@ -128,16 +135,16 @@ export async function DELETE(
     }
 
     // Delete the share
-    const share = await DocumentShare.findOneAndDelete({
-      _id: shareId,
-      documentId,
+    const result = await db.collection('documentshares').deleteOne({
+      _id: new ObjectId(shareId)
     });
 
-    if (!share) {
+    if (result.deletedCount === 0) {
       return NextResponse.json({ error: 'Share not found' }, { status: 404 });
     }
 
     return NextResponse.json({
+      success: true,
       message: 'Collaborator removed successfully',
     });
   } catch (error) {

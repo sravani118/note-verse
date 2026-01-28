@@ -13,6 +13,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
+import ThemeToggle from '../ThemeToggle';
 
 interface User {
   id: string;
@@ -27,6 +29,9 @@ interface DocumentHeaderProps {
   saveStatus: 'saved' | 'saving' | 'unsaved';
   activeUsers: User[];
   onShare?: () => void;
+  onOpenSettings?: () => void; // Add callback for opening settings
+  documentId?: string; // Add document ID for download/copy operations
+  editor?: any; // Add editor instance for content export
 }
 
 export default function DocumentHeader({
@@ -34,7 +39,10 @@ export default function DocumentHeader({
   onTitleChange,
   saveStatus,
   activeUsers,
-  onShare
+  onShare,
+  onOpenSettings,
+  documentId,
+  editor
 }: DocumentHeaderProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [localTitle, setLocalTitle] = useState(title);
@@ -68,6 +76,99 @@ export default function DocumentHeader({
       .join('')
       .toUpperCase()
       .slice(0, 2);
+  };
+
+  /**
+   * Download document as HTML
+   */
+  const handleDownload = () => {
+    if (!editor) {
+      toast.error('Editor not ready');
+      return;
+    }
+
+    try {
+      const html = editor.getHTML();
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${title}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setShowMenu(false);
+    } catch (error) {
+      console.error('Download failed:', error);
+      toast.error('Failed to download document');
+    }
+  };
+
+  /**
+   * Make a copy of the document
+   */
+  const handleMakeCopy = async () => {
+    if (!documentId || !editor) {
+      toast.error('Cannot copy document at this time');
+      return;
+    }
+
+    try {
+      const content = editor.getHTML();
+      
+      const response = await fetch('/api/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `${title} (Copy)`,
+          content: content
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create copy');
+      }
+
+      const data = await response.json();
+      
+      // Redirect to the new document
+      window.location.href = `/document/${data.document._id}`;
+    } catch (error) {
+      console.error('Make copy failed:', error);
+      toast.error('Failed to make a copy of the document');
+    }
+    setShowMenu(false);
+  };
+
+  /**
+   * Move document to trash
+   */
+  const handleMoveToTrash = async () => {
+    if (!documentId) {
+      toast.error('Cannot move document to trash at this time');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/documents/${documentId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete document');
+      }
+
+      toast.success('Document moved to trash');
+      // Redirect to dashboard
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 1000);
+    } catch (error) {
+      console.error('Delete failed:', error);
+      toast.error('Failed to move document to trash');
+    }
+    setShowMenu(false);
   };
 
   return (
@@ -160,6 +261,9 @@ export default function DocumentHeader({
             )}
           </div>
 
+          {/* Theme Toggle */}
+          <ThemeToggle />
+
           {/* Share Button */}
           <button
             onClick={onShare}
@@ -191,26 +295,41 @@ export default function DocumentHeader({
                   onClick={() => setShowMenu(false)}
                 ></div>
                 <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
-                  <button className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                  <button 
+                    onClick={handleDownload}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                  >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     Download
                   </button>
-                  <button className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                  <button 
+                    onClick={handleMakeCopy}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                  >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
                     Make a copy
                   </button>
-                  <button className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                  <button 
+                    onClick={() => {
+                      setShowMenu(false);
+                      if (onOpenSettings) onOpenSettings();
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                  >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                     </svg>
                     Document settings
                   </button>
                   <hr className="my-1 border-gray-200 dark:border-gray-700" />
-                  <button className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                  <button 
+                    onClick={handleMoveToTrash}
+                    className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                  >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>

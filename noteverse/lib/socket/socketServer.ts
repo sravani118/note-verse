@@ -12,6 +12,8 @@
 import { Server as HTTPServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import * as Y from 'yjs';
+import { connectToDatabase } from '../mongodb';
+import { ObjectId } from 'mongodb';
 
 // Store for Yjs documents
 // Each document has a unique Yjs document instance
@@ -56,16 +58,20 @@ export function initializeSocketServer(httpServer: HTTPServer) {
    */
   io.on('connection', (socket) => {
     console.log(`🔌 Client connected: ${socket.id}`);
+    
+    // Send immediate confirmation to client
+    socket.emit('connection-confirmed', { socketId: socket.id });
 
     /**
      * JOIN DOCUMENT ROOM
      * When a user opens a document, they join its room
      */
     socket.on('join-document', async ({ documentId, user }) => {
-      console.log(`📄 User ${user.name} joining document ${documentId}`);
+      console.log(`📄 User ${user.name} (${socket.id}) joining document ${documentId}`);
 
       // Join the Socket.io room for this document
       socket.join(documentId);
+      console.log(`  ✅ Socket ${socket.id} joined room: ${documentId}`);
 
       // Store user info on socket for later use
       socket.data.documentId = documentId;
@@ -74,6 +80,50 @@ export function initializeSocketServer(httpServer: HTTPServer) {
       // Initialize document if it doesn't exist
       if (!documents.has(documentId)) {
         const ydoc = new Y.Doc();
+        
+        // 🔥 FETCH CONTENT FROM MONGODB AND LOAD INTO YOJS
+        try {
+          console.log(`🔍 Loading document ${documentId} from MongoDB...`);
+          console.log(`  - Is valid ObjectId: ${ObjectId.isValid(documentId)}`);
+          const { db } = await connectToDatabase();
+          console.log(`  ✅ Connected to MongoDB`);
+          
+          // Try to find document by MongoDB ObjectId or custom ID
+          let document;
+          if (ObjectId.isValid(documentId)) {
+            console.log(`  - Searching by _id (ObjectId)`);
+            document = await db.collection('documents').findOne({
+              _id: new ObjectId(documentId)
+            });
+          } else {
+            console.log(`  - Searching by customId (string)`);
+            document = await db.collection('documents').findOne({
+              customId: documentId
+            });
+          }
+          
+          console.log(`  - Document found: ${!!document}`);
+          if (document) {
+            console.log(`  - Document title: ${document.title}`);
+            console.log(`  - Content length: ${document.content?.length || 0}`);
+            console.log(`  - Content preview: ${document.content?.substring(0, 100) || 'empty'}`);
+          }
+          
+          if (document && document.content && document.content.trim()) {
+            const savedContent = document.content;
+            console.log(`✅ Found document with ${savedContent.length} characters of content`);
+            
+            // Store the HTML content as metadata for the client to use
+            ydoc.getMap('metadata').set('initialContent', savedContent);
+            console.log(`📦 Stored content in Yjs metadata`);
+          } else {
+            console.log(`ℹ️ Document ${documentId} has no saved content, starting fresh`);
+          }
+        } catch (error) {
+          console.error(`❌ Error loading document content from MongoDB:`, error);
+          // Continue with empty document on error
+        }
+        
         documents.set(documentId, ydoc);
         console.log(`📝 Created new Yjs document: ${documentId}`);
       }
@@ -109,38 +159,6 @@ export function initializeSocketServer(httpServer: HTTPServer) {
       });
 
       console.log(`✅ User ${user.name} joined document ${documentId}. Total users: ${usersInDocument.length}`);
-    });
-
-    /**
-     * SYNC DOCUMENT UPDATES
-     * Handle Yjs update events from clients
-     */
-    socket.on('sync-update', ({ documentId, update }) => {
-      const ydoc = documents.get(documentId);
-      if (!ydoc) {
-        console.error(`❌ Document ${documentId} not found for sync`);
-        return;
-      }
-
-      try {
-        // Apply the update to the Yjs document
-        const updateBuffer = Buffer.from(update, 'base64');
-        Y.applyUpdate(ydoc, updateBuffer);
-
-        // Broadcast the update to all other clients in the room
-        // except the one who sent it
-        socket.to(documentId).emit('sync-update', {
-          update,
-          origin: socket.data.user
-        });
-
-        // Optional: Persist to database
-        // This can be done async in background
-        // await saveDocumentToDatabase(documentId, ydoc);
-      } catch (error) {
-        console.error('❌ Error applying Yjs update:', error);
-        socket.emit('sync-error', { error: 'Failed to sync update' });
-      }
     });
 
     /**
@@ -206,6 +224,60 @@ export function initializeSocketServer(httpServer: HTTPServer) {
         user,
         isTyping: false
       });
+    });
+
+    /**
+     * CHAT MESSAGE
+     * Handle real-time chat messages in document
+     */
+    socket.on('send-chat-message', ({ documentId, message }) => {
+      const user = socket.data.user;
+      
+      console.log(`\ud83d\udcac Received send-chat-message event`);
+      console.log(`  - Document ID: ${documentId}`);
+      console.log(`  - Message: ${message}`);
+      console.log(`  - User data:`, user);
+      console.log(`  - Socket ID: ${socket.id}`);
+      
+      if (!user || !documentId) {
+        console.error('\u274c Cannot send chat message: Missing user or documentId');
+        console.error(`  - User:`, user);
+        console.error(`  - DocumentId:`, documentId);
+        return;
+      }
+      // Verify socket is in the room
+      const rooms = Array.from(socket.rooms);
+      console.log(`  - Socket rooms:`, rooms);
+      console.log(`  - Is in document room: ${rooms.includes(documentId)}`);
+      console.log(`\ud83d\udce3 Broadcasting chat message to room ${documentId}`);
+
+      // Broadcast chat message to all users in the document (including sender)
+      const chatMessage = {
+        id: `temp-${Date.now()}-${socket.id}`,
+        senderId: user.id,
+        senderName: user.name,
+        senderEmail: user.email,
+        message: message,
+        timestamp: new Date()
+      };
+      
+      console.log(`  - Message object:`, chatMessage);
+      
+      // Get all sockets in the room
+      const socketsInRoom = io.sockets.adapter.rooms.get(documentId);
+      console.log(`  - Sockets in room ${documentId}:`, socketsInRoom ? Array.from(socketsInRoom) : 'none');
+      
+      console.log(`📢 Broadcasting to room ${documentId}...`);
+      
+      // GUARANTEED DELIVERY: Send to sender FIRST (direct)
+      socket.emit('receive-chat-message', chatMessage);
+      console.log(`  ✅ Sent to sender directly`);
+      
+      // THEN broadcast to everyone else in the room
+      socket.to(documentId).emit('receive-chat-message', chatMessage);
+      console.log(`  ✅ Broadcast to ${(socketsInRoom?.size || 1) - 1} other sockets`);
+      
+      console.log(`✅ Chat message delivery complete`);
     });
 
     /**

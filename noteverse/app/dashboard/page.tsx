@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import ThemeToggle from '../components/ThemeToggle';
+import toast from 'react-hot-toast';
 import DocumentCard from '../components/dashboard/DocumentCard';
 import DocumentSkeleton from '../components/dashboard/DocumentSkeleton';
 import EmptyState from '../components/dashboard/EmptyState';
 import SearchBar from '../components/dashboard/SearchBar';
 import ViewToggle from '../components/dashboard/ViewToggle';
+import ShareModal from '../components/document/ShareModal';
 
 interface Document {
   id: string;
@@ -34,6 +36,9 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [activeTab, setActiveTab] = useState<'my-docs' | 'shared'>('my-docs');
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareDocumentId, setShareDocumentId] = useState<string>('');
+  const [shareDocumentTitle, setShareDocumentTitle] = useState<string>('');
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -48,15 +53,24 @@ export default function DashboardPage() {
   
   const fetchDocuments = async () => {
     setLoading(true);
-    // Simulate API call - Replace with actual API
-    setTimeout(() => {
-      // TODO: Fetch real documents from API
-      // For now, starting with empty arrays until documents are created
+    try {
+      const response = await fetch('/api/documents');
+      if (response.ok) {
+        const data = await response.json();
+        setDocuments(data.documents || []);
+        setSharedDocuments(data.sharedDocuments || []);
+      } else {
+        console.error('Failed to fetch documents');
+        setDocuments([]);
+        setSharedDocuments([]);
+      }
+    } catch (error) {
+      console.error('Error fetching documents:', error);
       setDocuments([]);
       setSharedDocuments([]);
-      
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   useEffect(() => {
@@ -82,9 +96,68 @@ export default function DashboardPage() {
     router.push(`/document/${newDocId}`);
   };
   
-  const handleDeleteDocument = (id: string) => {
-    setDocuments(docs => docs.filter(doc => doc.id !== id));
-    setSharedDocuments(docs => docs.filter(doc => doc.id !== id));
+  const handleDeleteDocument = async (id: string) => {
+    try {
+      const response = await fetch(`/api/documents/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        // Remove from local state
+        setDocuments(docs => docs.filter(doc => doc.id !== id));
+        setSharedDocuments(docs => docs.filter(doc => doc.id !== id));
+        toast.success('Document deleted successfully');
+      } else {
+        toast.error('Failed to delete document. You may not have permission.');
+      }
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      toast.error('Failed to delete document. Please try again.');
+    }
+  };
+
+  const handleDuplicateDocument = async (id: string) => {
+    try {
+      // Find the original document
+      const originalDoc = documents.find(doc => doc.id === id) || sharedDocuments.find(doc => doc.id === id);
+      if (!originalDoc) {
+        toast.error('Document not found');
+        return;
+      }
+
+      // Create a duplicate
+      const response = await fetch('/api/documents', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: `${originalDoc.title} (Copy)`,
+          content: originalDoc.content,
+        }),
+      });
+
+      if (response.ok) {
+        const newDoc = await response.json();
+        // Add to local state
+        setDocuments(docs => [newDoc, ...docs]);
+        // Navigate to the new document
+        router.push(`/document/${newDoc.id}`);
+      } else {
+        toast.error('Failed to duplicate document');
+      }
+    } catch (error) {
+      console.error('Error duplicating document:', error);
+      toast.error('Failed to duplicate document. Please try again.');
+    }
+  };
+
+  const handleShareDocument = (id: string) => {
+    // Find the document to get its title
+    const doc = documents.find(d => d.id === id) || sharedDocuments.find(d => d.id === id);
+    setShareDocumentId(id);
+    setShareDocumentTitle(doc?.title || 'Untitled Document');
+    setShareModalOpen(true);
   };
   
   const currentDocuments = activeTab === 'my-docs' ? documents : sharedDocuments;
@@ -330,6 +403,8 @@ export default function DashboardPage() {
                 key={doc.id}
                 {...doc}
                 onDelete={handleDeleteDocument}
+                onDuplicate={handleDuplicateDocument}
+                onShare={handleShareDocument}
               />
             ))}
           </div>
@@ -345,6 +420,18 @@ export default function DashboardPage() {
           </div>
         )}
       </main>
+
+      {/* Share Modal */}
+      {shareModalOpen && session?.user?.email && (
+        <ShareModal
+          documentId={shareDocumentId}
+          documentTitle={shareDocumentTitle}
+          isOwner={true}
+          currentUserEmail={session.user.email}
+          ownerEmail={session.user.email}
+          onClose={() => setShareModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

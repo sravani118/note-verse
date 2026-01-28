@@ -35,15 +35,15 @@ export default function HowItWorks() {
   ];
 
   return (
-    <section id="how-it-works" className="py-20 px-6 lg:px-8 bg-white">
+    <section id="how-it-works" className="py-20 px-6 lg:px-8 bg-white dark:bg-gray-900">
       <div className="max-w-7xl mx-auto">
         {/* Section Header */}
         <div className="text-center mb-16">
-          <p className="text-indigo-600 font-semibold text-sm uppercase tracking-wide mb-3">HOW IT WORKS</p>
-          <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
+          <p className="text-indigo-600 dark:text-indigo-400 font-semibold text-sm uppercase tracking-wide mb-3">HOW IT WORKS</p>
+          <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white mb-4">
             Get started in 3 simple steps
           </h2>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
             From signup to collaboration in less than a minute.
           </p>
         </div>

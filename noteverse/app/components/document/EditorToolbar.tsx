@@ -20,6 +20,8 @@ import { useState } from 'react';
 
 interface EditorToolbarProps {
   editor: Editor | null;
+  currentFont?: string;
+  currentFontSize?: string;
 }
 
 // Toolbar button component
@@ -55,7 +57,7 @@ const Divider = () => (
   <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1"></div>
 );
 
-export default function EditorToolbar({ editor }: EditorToolbarProps) {
+export default function EditorToolbar({ editor, currentFont = 'Arial', currentFontSize = '14' }: EditorToolbarProps) {
   const [showFontDropdown, setShowFontDropdown] = useState(false);
   const [showSizeDropdown, setShowSizeDropdown] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -83,6 +85,121 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
     '#f3f3f3', '#ffffff', '#980000', '#ff0000', '#ff9900', '#ffff00', '#00ff00', '#00ffff',
     '#4a86e8', '#0000ff', '#9900ff', '#ff00ff'
   ];
+
+  /**
+   * Apply font family to selected text
+   */
+  const applyFontFamily = (font: string) => {
+    if (font === 'Default') {
+      editor.chain().focus().unsetFontFamily().run();
+    } else {
+      editor.chain().focus().setFontFamily(font).run();
+    }
+    setShowFontDropdown(false);
+  };
+
+  /**
+   * Apply font size to selected text
+   */
+  const applyFontSize = (size: string) => {
+    editor.chain().focus().setFontSize(`${size}px`).run();
+    setShowSizeDropdown(false);
+  };
+
+  /**
+   * Apply text color
+   */
+  const applyTextColor = (color: string) => {
+    editor.chain().focus().setColor(color).run();
+    setShowColorPicker(false);
+  };
+
+  /**
+   * Apply highlight color
+   */
+  const applyHighlight = (color: string) => {
+    editor.chain().focus().setHighlight({ color }).run();
+    setShowHighlightPicker(false);
+  };
+
+  /**
+   * Insert or edit link
+   */
+  const insertLink = () => {
+    const previousUrl = editor.getAttributes('link').href;
+    const url = window.prompt('Enter URL:', previousUrl);
+
+    // Cancelled
+    if (url === null) {
+      return;
+    }
+
+    // Empty - remove link
+    if (url === '') {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run();
+      return;
+    }
+
+    // Add protocol if missing
+    let formattedUrl = url;
+    if (!url.match(/^https?:\/\//i)) {
+      formattedUrl = 'https://' + url;
+    }
+
+    // If no text is selected, insert the URL as text
+    const { from, to } = editor.state.selection;
+    if (from === to) {
+      editor.chain().focus().insertContent(`<a href="${formattedUrl}">${url}</a>`).run();
+    } else {
+      // Update link on selected text
+      editor.chain().focus().extendMarkRange('link').setLink({ href: formattedUrl }).run();
+    }
+  };
+
+  /**
+   * Upload and insert image
+   */
+  const insertImage = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (readerEvent) => {
+        const url = readerEvent.target?.result as string;
+        if (url) {
+          // Create an image to get dimensions
+          const img = new window.Image();
+          img.onload = () => {
+            // Calculate dimensions to fit within editor (max 800px width)
+            let width = img.width;
+            let height = img.height;
+            const maxWidth = 800;
+            
+            if (width > maxWidth) {
+              height = (height * maxWidth) / width;
+              width = maxWidth;
+            }
+            
+            // Insert image with width and height attributes for resizing
+            editor.chain().focus().setImage({ 
+              src: url,
+              alt: file.name,
+              title: file.name,
+              width: width,
+              height: height,
+            }).run();
+          };
+          img.src = url;
+        }
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
 
   return (
     <div className="sticky top-14 left-0 right-0 z-40 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
@@ -121,7 +238,7 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
               className="h-8 px-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex items-center gap-1 min-w-[110px] border border-gray-300 dark:border-gray-600"
               title="Font family"
             >
-              <span className="truncate">Arial</span>
+              <span className="truncate">{currentFont}</span>
               <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
@@ -133,10 +250,7 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
                 {fonts.map(font => (
                   <button
                     key={font}
-                    onClick={() => {
-                      // Font family would need to be configured in TipTap extensions
-                      setShowFontDropdown(false);
-                    }}
+                    onClick={() => applyFontFamily(font)}
                     className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                     style={{ fontFamily: font === 'Default' ? 'inherit' : font }}
                   >
@@ -155,7 +269,7 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
             className="h-8 px-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex items-center gap-1 min-w-[60px] border border-gray-300 dark:border-gray-600"
             title="Font size"
           >
-            <span>14</span>
+            <span>{currentFontSize}</span>
             <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
@@ -167,10 +281,7 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
                 {sizes.map(size => (
                   <button
                     key={size}
-                    onClick={() => {
-                      // Font size would need to be configured in TipTap extensions
-                      setShowSizeDropdown(false);
-                    }}
+                    onClick={() => applyFontSize(size)}
                     className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                   >
                     {size}
@@ -231,10 +342,7 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
                   {colors.map(color => (
                     <button
                       key={color}
-                      onClick={() => {
-                        // Text color would need TextStyle extension
-                        setShowColorPicker(false);
-                      }}
+                      onClick={() => applyTextColor(color)}
                       className="w-6 h-6 rounded border border-gray-300 dark:border-gray-600 hover:scale-110 transition-transform"
                       style={{ backgroundColor: color }}
                       title={color}
@@ -264,10 +372,7 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
                   {colors.map(color => (
                     <button
                       key={color}
-                      onClick={() => {
-                        // Highlight would need Highlight extension
-                        setShowHighlightPicker(false);
-                      }}
+                      onClick={() => applyHighlight(color)}
                       className="w-6 h-6 rounded border border-gray-300 dark:border-gray-600 hover:scale-110 transition-transform"
                       style={{ backgroundColor: color }}
                       title={color}
@@ -349,17 +454,22 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 
         {/* Link */}
         <ToolbarButton
-          onClick={() => {
-            const url = window.prompt('Enter URL:');
-            if (url) {
-              editor.chain().focus().setLink({ href: url }).run();
-            }
-          }}
+          onClick={insertLink}
           isActive={editor.isActive('link')}
           title="Insert link (Ctrl+K)"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+          </svg>
+        </ToolbarButton>
+
+        {/* Image Upload */}
+        <ToolbarButton
+          onClick={insertImage}
+          title="Insert image"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
         </ToolbarButton>
         </div>

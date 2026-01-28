@@ -10,6 +10,7 @@ interface ProfileHeaderProps {
   avatarUrl?: string;
   onNameChange: (name: string) => void;
   onAvatarChange: (file: File) => void;
+  onAvatarDelete: () => void;
 }
 
 export default function ProfileHeader({ 
@@ -18,10 +19,12 @@ export default function ProfileHeader({
   role, 
   avatarUrl,
   onNameChange,
-  onAvatarChange
+  onAvatarChange,
+  onAvatarDelete
 }: ProfileHeaderProps) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState(name);
+  const [previewUrl, setPreviewUrl] = useState(avatarUrl);
 
   const handleNameSave = () => {
     onNameChange(editedName);
@@ -31,8 +34,20 @@ export default function ProfileHeader({
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Create preview URL
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+      
       onAvatarChange(file);
     }
+  };
+
+  const handleAvatarDelete = () => {
+    setPreviewUrl(undefined);
+    onAvatarDelete();
   };
 
   return (
@@ -41,26 +56,43 @@ export default function ProfileHeader({
       
       <div className="flex items-start gap-6">
         {/* Avatar */}
-        <div className="relative group">
-          <div className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-lg">
-            {avatarUrl ? (
-              <Image src={avatarUrl} alt={name} width={96} height={96} className="rounded-full" />
-            ) : (
-              name.charAt(0).toUpperCase()
-            )}
+        <div className="relative">
+          <div className="relative group">
+            <div className="w-24 h-24 rounded-full overflow-hidden shadow-lg">
+              {previewUrl ? (
+                <img src={previewUrl} alt={name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-3xl font-bold">
+                  {name.charAt(0).toUpperCase()}
+                </div>
+              )}
+            </div>
+            <label className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <input 
+                type="file" 
+                className="hidden" 
+                accept="image/*"
+                onChange={handleAvatarUpload}
+              />
+            </label>
           </div>
-          <label className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            <input 
-              type="file" 
-              className="hidden" 
-              accept="image/*"
-              onChange={handleAvatarUpload}
-            />
-          </label>
+          
+          {/* Delete Photo Button */}
+          {previewUrl && (
+            <button
+              onClick={handleAvatarDelete}
+              className="absolute -bottom-2 -right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg flex items-center justify-center transition-colors"
+              title="Delete photo"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* User Info */}

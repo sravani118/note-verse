@@ -1,5 +1,7 @@
 'use client';
 
+import Dropdown from '@/app/components/Dropdown';
+
 interface CollaborationIdentityProps {
   displayName: string;
   cursorColor: string;
@@ -83,22 +85,22 @@ export default function CollaborationIdentity({
         {/* Time Zone */}
         <div>
           <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Time Zone</label>
-          <select
+          <Dropdown
             value={timeZone}
-            onChange={(e) => onTimeZoneChange(e.target.value)}
-            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-          >
-            <option value="UTC">UTC (Coordinated Universal Time)</option>
-            <option value="America/New_York">Eastern Time (ET)</option>
-            <option value="America/Chicago">Central Time (CT)</option>
-            <option value="America/Denver">Mountain Time (MT)</option>
-            <option value="America/Los_Angeles">Pacific Time (PT)</option>
-            <option value="Europe/London">London (GMT)</option>
-            <option value="Europe/Paris">Paris (CET)</option>
-            <option value="Asia/Tokyo">Tokyo (JST)</option>
-            <option value="Asia/Shanghai">Shanghai (CST)</option>
-            <option value="Asia/Kolkata">India (IST)</option>
-          </select>
+            onChange={onTimeZoneChange}
+            options={[
+              { value: 'UTC', label: 'UTC (Coordinated Universal Time)' },
+              { value: 'America/New_York', label: 'Eastern Time (ET)' },
+              { value: 'America/Chicago', label: 'Central Time (CT)' },
+              { value: 'America/Denver', label: 'Mountain Time (MT)' },
+              { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
+              { value: 'Europe/London', label: 'London (GMT)' },
+              { value: 'Europe/Paris', label: 'Paris (CET)' },
+              { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
+              { value: 'Asia/Shanghai', label: 'Shanghai (CST)' },
+              { value: 'Asia/Kolkata', label: 'India (IST)' }
+            ]}
+          />
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import ThemeToggle from '../../components/ThemeToggle';
 
 export default function ResetPasswordPage({ params }: { params: Promise<{ token: string }> }) {
   const router = useRouter();
@@ -62,7 +63,12 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50 flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center px-4 py-12">
+      {/* Theme Toggle - Fixed Position */}
+      <div className="fixed top-6 right-6 z-50">
+        <ThemeToggle />
+      </div>
+
       <div className="max-w-md w-full">
         {/* Logo and Header */}
         <div className="text-center mb-8">
@@ -72,14 +78,14 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
               </svg>
             </div>
-            <span className="text-2xl font-bold text-gray-900">NoteVerse</span>
+            <span className="text-2xl font-bold text-gray-900 dark:text-white">NoteVerse</span>
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Reset Your Password</h1>
-          <p className="text-gray-600">Enter your new password below</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Reset Your Password</h1>
+          <p className="text-gray-600 dark:text-gray-300">Enter your new password below</p>
         </div>
 
         {/* Form */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-8">
           {message ? (
             <div className="text-center">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">

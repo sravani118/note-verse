@@ -4,29 +4,29 @@ import Link from 'next/link';
 
 export default function Hero() {
   return (
-    <section className="pt-32 pb-20 px-6 lg:px-8">
+    <section className="pt-32 pb-20 px-6 lg:px-8 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           {/* Left Content */}
           <div className="space-y-8">
             {/* Badge */}
-            <div className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-full text-sm font-medium">
+            <div className="inline-flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-4 py-2 rounded-full text-sm font-medium">
               <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
               Real-time collaboration
             </div>
 
             {/* Heading */}
-            <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 leading-tight">
+            <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white leading-tight">
               NoteVerse
             </h1>
 
             {/* Subheading */}
-            <p className="text-xl text-gray-600 leading-relaxed">
+            <p className="text-xl text-gray-600 dark:text-gray-300 leading-relaxed">
               Write, collaborate, and sync in real time.
             </p>
 
             {/* Description */}
-            <p className="text-lg text-gray-500">
+            <p className="text-lg text-gray-500 dark:text-gray-400">
               The modern note-taking platform where teams, students, and professionals come together to create and collaborate seamlessly.
             </p>
 
@@ -53,17 +53,17 @@ export default function Hero() {
                   D
                 </div>
               </div>
-              <p className="text-gray-600 font-medium">
-                <span className="text-gray-900 font-bold">2,000+</span> teams collaborating
+              <p className="text-gray-600 dark:text-gray-300 font-medium">
+                <span className="text-gray-900 dark:text-white font-bold">2,000+</span> teams collaborating
               </p>
             </div>
           </div>
 
           {/* Right Content - Document Preview */}
           <div className="relative">
-            <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
               {/* Document Header */}
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b border-gray-200">
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
