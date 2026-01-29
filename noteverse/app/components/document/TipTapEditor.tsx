@@ -49,17 +49,21 @@ interface TipTapEditorProps {
 
 export default function TipTapEditor({ ydoc, currentUser, onReady, readOnly = false }: TipTapEditorProps) {
   const hasCalledOnReady = useRef(false);
+  const hasLoadedContent = useRef(false); // Track if initial content has been loaded
   
   // Memoize extensions to prevent duplicate registration
   const extensions = useMemo(() => {
+    console.log('🔧 Configuring TipTap extensions with collaboration support');
+    
     const exts = [
-      // StarterKit without history - Collaboration provides history
+      // StarterKit without history - Collaboration extension provides its own history
       StarterKit.configure({
+        history: false,
         dropcursor: {
           color: currentUser.cursorColor,
           width: 2,
         },
-      }),
+      } as any),
       // Add extensions not included in StarterKit
       TextAlign.configure({
         types: ['heading', 'paragraph'],
@@ -139,10 +143,24 @@ export default function TipTapEditor({ ydoc, currentUser, onReady, readOnly = fa
   });
 
   useEffect(() => {
-    if (!editor || !ydoc || hasCalledOnReady.current) return;
+    if (!editor || !ydoc) return;
+
+    // Load initial content from Yjs metadata if available (only once)
+    if (!hasLoadedContent.current) {
+      const metadata = ydoc.getMap('metadata');
+      const initialContent = metadata.get('initialContent');
+      
+      if (initialContent && typeof initialContent === 'string') {
+        console.log(`📄 Loading ${initialContent.length} characters of saved content into editor`);
+        editor.commands.setContent(initialContent);
+        metadata.delete('initialContent'); // Clear after loading
+        hasLoadedContent.current = true;
+        console.log('✅ Content loaded into editor');
+      }
+    }
 
     // Notify parent when editor is ready (only once)
-    if (onReady) {
+    if (onReady && !hasCalledOnReady.current) {
       hasCalledOnReady.current = true;
       onReady(editor);
     }

@@ -45,16 +45,29 @@ export async function GET(
       document = await db.collection('documents').findOne({
         customId: documentId
       });
+      
+      // If document doesn't exist yet (new document not saved), return empty chat
+      // This is normal behavior - documents are created on first save
       if (!document) {
-        console.log(`❌ Chat GET: Document ${documentId} not found`);
-        return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+        console.log(`ℹ️ Chat GET: Document ${documentId} not found (new document - will be created on first save)`);
+        return NextResponse.json({
+          success: true,
+          messages: [],
+          count: 0,
+          info: 'Document not yet created. Chat will be available after first save.'
+        });
       }
       docObjectId = document._id;
     }
 
     if (!document) {
-      console.log(`❌ Chat GET: Document not found: ${documentId}`);
-      return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+      console.log(`ℹ️ Chat GET: Document not found: ${documentId} (returning empty chat)`);
+      return NextResponse.json({
+        success: true,
+        messages: [],
+        count: 0,
+        info: 'Document not yet created. Chat will be available after first save.'
+      });
     }
 
     // Verify user has access to this document
@@ -90,6 +103,8 @@ export async function GET(
     }
 
     // Fetch chat messages for this document
+    // Note: Always return an array (even if empty) instead of 404
+    // This prevents console errors when a document has no chat messages yet
     const messages = await db.collection('chatmessages')
       .find({ 
         documentId: docObjectId,
@@ -112,7 +127,8 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      messages: formattedMessages
+      messages: formattedMessages,
+      count: formattedMessages.length
     });
   } catch (error) {
     console.error('Error fetching chat messages:', error);

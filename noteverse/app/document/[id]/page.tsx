@@ -55,6 +55,8 @@ export default function DocumentPage() {
 
   // Document state
   const [documentTitle, setDocumentTitle] = useState('Untitled Document');
+  const documentTitleRef = useRef('Untitled Document'); // Keep ref in sync with state for closures
+  const [documentContent, setDocumentContent] = useState(''); // Store fetched content
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [wordCount, setWordCount] = useState(0);
@@ -103,7 +105,7 @@ export default function DocumentPage() {
   // Share modal state
   const [showShareModal, setShowShareModal] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
-  const [userPermission, setUserPermission] = useState<'viewer' | 'editor' | 'owner'>('viewer');
+  const [userPermission, setUserPermission] = useState<'viewer' | 'editor' | 'owner' | null>(null);
   const [ownerEmail, setOwnerEmail] = useState('');
   const [visibility, setVisibility] = useState<'restricted' | 'public'>('restricted');
   const [publicPermission, setPublicPermission] = useState<'viewer' | 'editor'>('viewer');
@@ -145,11 +147,23 @@ export default function DocumentPage() {
         const docVisibility = docData.document?.visibility || 'restricted';
         const docPublicPermission = docData.document?.publicPermission || 'viewer';
         const docTitle = docData.document?.title || 'Untitled Document';
+        const docContent = docData.document?.content || '';
+        const isNewDoc = docData.document?.isNew || false;
+        
+        console.log('📄 Document loaded from API:', { 
+          title: docTitle,
+          isNew: isNewDoc,
+          contentLength: docContent.length,
+          rawTitle: docData.document?.title,
+          alreadyLoaded: contentLoadedRef.current 
+        });
         
         setOwnerEmail(docOwnerEmail || '');
         setVisibility(docVisibility);
         setPublicPermission(docPublicPermission);
         setDocumentTitle(docTitle);
+        documentTitleRef.current = docTitle; // Keep ref in sync
+        setDocumentContent(docContent); // Store content in state
         
         // Load editor settings from document
         if (docData.document?.settings) {
@@ -267,7 +281,7 @@ export default function DocumentPage() {
   }, [fetchChatMessages]);
 
   // Initialize Socket.io connection
-  const { socket, isConnected } = useSocket();
+  const { socket, isConnected, isConnecting } = useSocket();
 
   // Get current user info (memoized to prevent re-renders)
   const currentUser: User = useMemo(() => ({
@@ -282,23 +296,8 @@ export default function DocumentPage() {
     socket,
     documentId,
     user: currentUser,
-    onSync: (ydocInstance) => {
-      // When Yjs syncs, check if there's initial content to load
-      if (contentLoadedRef.current) {
-        console.log('⏩ Content already loaded, skipping');
-        return;
-      }
-      
-      const metadata = ydocInstance.getMap('metadata');
-      const initialContent = metadata.get('initialContent');
-      
-      if (initialContent && typeof initialContent === 'string' && editor) {
-        console.log(`📄 [onSync] Loading ${initialContent.length} characters of saved content into editor`);
-        editor.commands.setContent(initialContent);
-        metadata.delete('initialContent');
-        contentLoadedRef.current = true;
-        console.log('✅ Content loaded via onSync');
-      }
+    onSync: () => {
+      console.log('✅ Yjs document synced with server');
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onUsersChange: (users: any[]) => {
@@ -307,6 +306,18 @@ export default function DocumentPage() {
       setActiveUsers(mappedUsers);
     }
   });
+
+  // Load document content into Yjs when ydoc becomes available
+  useEffect(() => {
+    if (!ydoc || !documentContent || contentLoadedRef.current) {
+      return;
+    }
+
+    console.log(`📥 Loading content into Yjs (${documentContent.length} characters)`);
+    const metadata = ydoc.getMap('metadata');
+    metadata.set('initialContent', documentContent);
+    console.log('✅ Content stored in Yjs metadata, will be loaded by editor when ready');
+  }, [ydoc, documentContent]);
 
   /**
    * Socket.io chat event listeners
@@ -429,25 +440,38 @@ export default function DocumentPage() {
       // Get document content
       const content = editor.getHTML();
       
+      // Use ref to get current title (avoids stale closure issue)
+      const currentTitle = documentTitleRef.current;
+      
+      console.log('💾 Auto-saving document:', { 
+        title: currentTitle, 
+        contentLength: content.length,
+        wordCount,
+        charCount 
+      });
+      
       // Save to API
       const response = await fetch(`/api/documents/${documentId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           content,
-          title: documentTitle,
+          title: currentTitle,
           wordCount,
           charCount
         })
       });
 
       if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Failed to auto-save:', errorData);
         throw new Error('Failed to save document');
       }
       
+      const result = await response.json();
+      console.log('✅ Document auto-saved:', result);
       setSaveStatus('saved');
       setLastSaved(new Date());
-      console.log('📄 Document auto-saved');
     } catch (error) {
       console.error('Error saving document:', error);
       setSaveStatus('unsaved');
@@ -514,7 +538,9 @@ export default function DocumentPage() {
    * Handle document title change
    */
   const handleTitleChange = async (newTitle: string) => {
+    console.log('📝 Title change requested:', { oldTitle: documentTitle, newTitle });
     setDocumentTitle(newTitle);
+    documentTitleRef.current = newTitle; // Keep ref in sync
     setSaveStatus('unsaved');
     
     // Debounce title save
@@ -525,6 +551,7 @@ export default function DocumentPage() {
     const timeout = setTimeout(async () => {
       try {
         setSaveStatus('saving');
+        console.log('💾 Saving title to API:', newTitle);
         
         // Save to API
         const response = await fetch(`/api/documents/${documentId}`, {
@@ -534,14 +561,19 @@ export default function DocumentPage() {
         });
 
         if (!response.ok) {
+          const errorData = await response.json();
+          console.error('❌ Failed to save title:', errorData);
           throw new Error('Failed to save title');
         }
         
+        const result = await response.json();
+        console.log('✅ Title saved successfully:', result);
         setSaveStatus('saved');
         setLastSaved(new Date());
       } catch (error) {
         console.error('Error saving title:', error);
         setSaveStatus('unsaved');
+        toast.error('Failed to save title');
       }
     }, 1000);
     
@@ -740,9 +772,9 @@ export default function DocumentPage() {
               provider={null}
               readOnly={userPermission === 'viewer'}
             />
-            {/* Read-only banner */}
+            {/* Read-only banner - only show after permission is determined */}
             {userPermission === 'viewer' && (
-              <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-blue-500 text-white px-6 py-2 rounded-lg shadow-lg z-40">
+              <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-blue-500 text-white px-6 py-2 rounded-lg shadow-lg z-40">
                 <div className="flex items-center gap-2">
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -804,14 +836,25 @@ export default function DocumentPage() {
         />
       )}
 
-      {/* Connection Status Toast (when disconnected) */}
-      {!isConnected && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-pulse">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      {/* Connection Status - Professional & Subtle */}
+      {!isConnected && isConnecting && (
+        <div className="fixed top-4 right-4 bg-white dark:bg-gray-800 border border-yellow-200 dark:border-yellow-800 px-4 py-2 rounded-md shadow-sm z-50">
+          <div className="flex items-center gap-2 text-sm">
+            <svg className="w-4 h-4 text-yellow-600 dark:text-yellow-400 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            <span className="font-medium">Connection lost. Trying to reconnect...</span>
+            <span className="text-gray-700 dark:text-gray-300">Reconnecting...</span>
+          </div>
+        </div>
+      )}
+      
+      {!isConnected && !isConnecting && (
+        <div className="fixed top-4 right-4 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 px-4 py-2 rounded-md shadow-sm z-50">
+          <div className="flex items-center gap-2 text-sm">
+            <svg className="w-4 h-4 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
+            </svg>
+            <span className="text-gray-700 dark:text-gray-300">Offline</span>
           </div>
         </div>
       )}

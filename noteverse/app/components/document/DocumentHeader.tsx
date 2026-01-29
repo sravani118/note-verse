@@ -11,7 +11,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import ThemeToggle from '../ThemeToggle';
@@ -47,6 +47,11 @@ export default function DocumentHeader({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [localTitle, setLocalTitle] = useState(title);
   const [showMenu, setShowMenu] = useState(false);
+
+  // Sync local title with prop when it changes
+  useEffect(() => {
+    setLocalTitle(title);
+  }, [title]);
 
   const handleTitleSubmit = () => {
     setIsEditingTitle(false);

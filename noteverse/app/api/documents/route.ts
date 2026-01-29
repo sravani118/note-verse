@@ -45,14 +45,11 @@ export async function GET() {
       .sort({ updatedAt: -1 })
       .toArray();
 
-    // Fetch documents shared with the user
-    const sharedPermissions = await db.collection('sharepermissions')
-      .find({ sharedWith: user._id })
-      .toArray();
-
-    const sharedDocumentIds = sharedPermissions.map(p => p.document);
+    // Fetch documents shared with the user (using sharedWith array)
     const sharedDocuments = await db.collection('documents')
-      .find({ _id: { $in: sharedDocumentIds } })
+      .find({ 
+        'sharedWith.userId': user._id
+      })
       .sort({ updatedAt: -1 })
       .toArray();
 
@@ -75,6 +72,11 @@ export async function GET() {
           _id: doc.owner
         });
 
+        // Find the current user's role in sharedWith
+        const shareInfo = doc.sharedWith?.find((share: any) => 
+          share.userId?.equals(user._id)
+        );
+
         return {
           id: doc.customId || doc._id.toString(),
           title: doc.title,
@@ -83,6 +85,8 @@ export async function GET() {
           updatedAt: doc.updatedAt,
           isOwner: false,
           isShared: true,
+          role: shareInfo?.role || 'viewer', // Include the user's role
+          sharedAt: shareInfo?.sharedAt,
           owner: owner ? {
             name: owner.name,
             email: owner.email

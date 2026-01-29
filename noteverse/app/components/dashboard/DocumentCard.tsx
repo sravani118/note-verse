@@ -11,6 +11,8 @@ interface DocumentCardProps {
   updatedAt: string;
   collaborators?: Array<{ name: string; avatar?: string }>;
   isShared?: boolean;
+  role?: string; // 'owner', 'editor', 'viewer'
+  owner?: { name: string; email: string };
   onDelete: (id: string) => void;
   onDuplicate?: (id: string) => void;
   onShare?: (id: string) => void;
@@ -24,6 +26,8 @@ export default function DocumentCard({
   updatedAt,
   collaborators = [],
   isShared = false,
+  role,
+  owner,
   onDelete,
   onDuplicate,
   onShare
@@ -81,13 +85,44 @@ export default function DocumentCard({
                 {title}
               </h3>
             </Link>
-            {isShared && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded-full font-medium">
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                </svg>
-                Shared
-              </span>
+            <div className="flex items-center gap-2 flex-wrap mt-2">
+              {isShared && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded-full font-medium">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                  </svg>
+                  Shared
+                </span>
+              )}
+              {role && role !== 'owner' && (
+                <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full font-medium ${
+                  role === 'editor'
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                    : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                }`}>
+                  {role === 'editor' ? (
+                    <>
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                      Can Edit
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      View Only
+                    </>
+                  )}
+                </span>
+              )}
+            </div>
+            {owner && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Owner: {owner.name || owner.email}
+              </p>
             )}
           </div>
 

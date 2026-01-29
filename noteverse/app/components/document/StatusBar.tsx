@@ -36,7 +36,7 @@ export default function StatusBar({
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-2 z-20 pl-64 pr-80">
+    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-2 z-40 pl-64 pr-80">
       <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
         {/* Left: Connection Status */}
         <div className="flex items-center gap-2">

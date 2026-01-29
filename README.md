@@ -112,12 +112,64 @@ mongod
 ```
 
 ### 5. Run the Development Server
+
+#### Option A: Run Both Servers (Recommended)
 ```bash
 cd noteverse
-npm run dev
+
+# Terminal 1 - Socket.io Server
+npm run dev:socket
+
+# Terminal 2 - Next.js App (in a new terminal)
+npm run dev:next
 ```
 
-The application will be available at **http://localhost:3001**
+#### Option B: Run Concurrently (if you have concurrently installed)
+```bash
+cd noteverse
+npm install -g concurrently  # if not already installed
+npm run dev:full
+```
+
+The application will be available at:
+- **Next.js App**: http://localhost:3000
+- **Socket.io Server**: http://localhost:3001
+
+## 🌐 Production Deployment
+
+NoteVerse requires a **split deployment architecture** because Vercel doesn't support persistent WebSocket connections.
+
+### Quick Deployment Steps:
+
+1. **Deploy Socket.io Server** to Render/Railway
+   - See [SOCKET_DEPLOY.md](noteverse/SOCKET_DEPLOY.md) for quick start
+   - Get your server URL: `https://noteverse-socket.onrender.com`
+
+2. **Deploy Frontend** to Vercel
+   - Set environment variable: `NEXT_PUBLIC_SOCKET_URL=https://noteverse-socket.onrender.com`
+   - Set other env variables (MongoDB, NextAuth, etc.)
+
+3. **Configure CORS**
+   - In socket server: `ALLOWED_ORIGINS=https://your-vercel-app.vercel.app`
+
+### Full Deployment Guide
+See [DEPLOYMENT.md](noteverse/DEPLOYMENT.md) for complete step-by-step instructions.
+
+### Architecture
+```
+┌──────────────────────────────────────────────────────────┐
+│                                                            │
+│  Frontend (Next.js)         Socket.io Server              │
+│  Vercel                     Render/Railway                │
+│  ↓                           ↓                            │
+│  https://noteverse.          https://noteverse-socket.    │
+│  vercel.app                  onrender.com                 │
+│                                                            │
+│  WebSocket ←──────────────────────────────────────────→   │
+│  NEXT_PUBLIC_SOCKET_URL     ALLOWED_ORIGINS               │
+│                                                            │
+└──────────────────────────────────────────────────────────┘
+```
 
 ## 🚀 Usage
 

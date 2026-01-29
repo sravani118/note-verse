@@ -18,6 +18,14 @@ export interface IDocument extends MongooseDocument {
     addedAt: Date;
   }>;
   
+  // Email-based sharing (Google Docs style)
+  sharedWith: Array<{
+    userId: mongoose.Types.ObjectId | string;
+    email: string;
+    role: 'editor' | 'viewer';
+    sharedAt: Date;
+  }>;
+  
   // Document metadata
   isPublic: boolean;
   isArchived: boolean;
@@ -92,6 +100,33 @@ const DocumentSchema = new Schema<IDocument>(
           default: 'viewer'
         },
         addedAt: {
+          type: Date,
+          default: Date.now
+        }
+      }
+    ],
+    
+    // Email-based sharing (Google Docs style)
+    sharedWith: [
+      {
+        userId: {
+          type: Schema.Types.ObjectId,
+          ref: 'User',
+          required: true
+        },
+        email: {
+          type: String,
+          required: true,
+          lowercase: true,
+          trim: true
+        },
+        role: {
+          type: String,
+          enum: ['editor', 'viewer'],
+          default: 'viewer',
+          required: true
+        },
+        sharedAt: {
           type: Date,
           default: Date.now
         }
@@ -202,6 +237,8 @@ const DocumentSchema = new Schema<IDocument>(
 DocumentSchema.index({ owner: 1, createdAt: -1 });
 DocumentSchema.index({ owner: 1, isArchived: 1 });
 DocumentSchema.index({ 'collaborators.user': 1 });
+DocumentSchema.index({ 'sharedWith.userId': 1 }); // For shared document queries
+DocumentSchema.index({ 'sharedWith.email': 1 }); // For email-based sharing
 DocumentSchema.index({ title: 'text', content: 'text' }); // Full-text search
 DocumentSchema.index({ tags: 1 });
 DocumentSchema.index({ lastEditedAt: -1 });

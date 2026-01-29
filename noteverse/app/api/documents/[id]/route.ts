@@ -35,11 +35,13 @@ export async function GET(
       document = await db.collection('documents').findOne({
         _id: new ObjectId(documentId)
       });
+      console.log(`🔍 GET document by ObjectId ${documentId}:`, document ? `Found (title: "${document.title}")` : 'Not found');
     } else {
       // Custom string ID (e.g., doc-1769406684982-dkluhj1r6)
       document = await db.collection('documents').findOne({
         customId: documentId
       });
+      console.log(`🔍 GET document by customId ${documentId}:`, document ? `Found (title: "${document.title}")` : 'Not found');
     }
 
     if (!document) {
@@ -82,8 +84,49 @@ export async function GET(
       });
     }
 
-    // Note: Access control is handled in the UI layer
-    // This endpoint returns document data which the UI uses to determine permissions
+    // Enforce access control
+    let hasAccess = false;
+    let userRole = 'none';
+    let currentUser: any = null;
+    
+    if (session?.user?.email) {
+      currentUser = await db.collection('users').findOne({
+        email: session.user.email
+      });
+      
+      if (currentUser) {
+        // Check if user is the owner
+        if (document.owner?.equals(currentUser._id)) {
+          hasAccess = true;
+          userRole = 'owner';
+        } else {
+          // Check if user is in sharedWith array
+          const sharedWith = document.sharedWith || [];
+          const shareInfo = sharedWith.find((share: any) => 
+            share.userId?.equals(currentUser._id)
+          );
+          
+          if (shareInfo) {
+            hasAccess = true;
+            userRole = shareInfo.role;
+          }
+        }
+      }
+    }
+    
+    // Check public access
+    if (!hasAccess && document.visibility === 'public') {
+      hasAccess = true;
+      userRole = document.publicPermission || 'viewer';
+    }
+    
+    // Deny access if not authorized
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: 'Access denied. You do not have permission to view this document.' },
+        { status: 403 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
@@ -98,6 +141,8 @@ export async function GET(
         } : null,
         visibility: document.visibility || 'restricted',
         publicPermission: document.publicPermission || 'viewer',
+        userRole, // Add user's role/permission
+        canEdit: userRole === 'owner' || userRole === 'editor',
         settings: {
           chatEnabled: document.chatEnabled !== false,
           defaultFont: document.defaultFont || 'Arial',
@@ -157,6 +202,8 @@ export async function PUT(
     let currentDocument;
     let docObjectId;
     
+    console.log(`📝 PUT document ${documentId}:`, { title, contentLength: content?.length || 0 });
+    
     if (ObjectId.isValid(documentId)) {
       // Standard MongoDB ObjectId
       docObjectId = new ObjectId(documentId);
@@ -173,6 +220,7 @@ export async function PUT(
 
     // If document doesn't exist, create it
     if (!currentDocument) {
+      console.log(`🆕 Creating new document with title: "${title || 'Untitled Document'}"`);
       const newDoc = {
         customId: documentId,
         title: title || 'Untitled Document',
@@ -189,7 +237,7 @@ export async function PUT(
       const result = await db.collection('documents').insertOne(newDoc);
       docObjectId = result.insertedId;
 
-      console.log(`📄 Created new document ${documentId}`);
+      console.log(`✅ Created new document ${documentId} with _id ${result.insertedId}`);
 
       return NextResponse.json({
         success: true,
@@ -198,19 +246,29 @@ export async function PUT(
       });
     }
 
-    // Check permissions (skip for guest users)
+    console.log(`📄 Updating existing document. Current title: "${currentDocument.title}"`);
+    
+    // Check permissions
     if (userId && currentDocument.owner) {
       const isOwner = currentDocument.owner.equals(userId);
+      
       if (!isOwner) {
-        const hasWriteAccess = await db.collection('sharepermissions').findOne({
-          document: docObjectId,
-          sharedWith: userId,
-          permission: { $in: ['edit', 'owner'] }
-        });
+        // Check if user has edit permission in sharedWith array
+        const sharedWith = currentDocument.sharedWith || [];
+        const shareInfo = sharedWith.find((share: any) => 
+          share.userId?.equals(userId)
+        );
+        
+        const hasEditAccess = shareInfo && shareInfo.role === 'editor';
+        
+        // Also check if document is public with editor permission
+        const hasPublicEditAccess = 
+          currentDocument.visibility === 'public' && 
+          currentDocument.publicPermission === 'editor';
 
-        if (!hasWriteAccess) {
+        if (!hasEditAccess && !hasPublicEditAccess) {
           return NextResponse.json(
-            { error: 'Write access denied' },
+            { error: 'Edit access denied. You only have viewer permission.' },
             { status: 403 }
           );
         }
@@ -227,10 +285,14 @@ export async function PUT(
     if (wordCount !== undefined) updateData.wordCount = wordCount;
     if (characterCount !== undefined) updateData.characterCount = characterCount;
 
+    console.log(`💾 Updating document with:`, updateData);
+
     await db.collection('documents').updateOne(
       { _id: docObjectId },
       { $set: updateData }
     );
+
+    console.log(`✅ Document updated successfully`);
 
     // Create version snapshot (auto-save every 5 minutes or manual save) - only for authenticated users
     if (userId && content) {
