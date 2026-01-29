@@ -24,13 +24,27 @@ export function useSocket(options: UseSocketOptions = {}) {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
+    // Get Socket.io server URL from environment variable
+    // CRITICAL: Use environment variable, NOT localhost or window.location
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000';
+    
+    console.log('🔌 Connecting to Socket.io server:', socketUrl);
+
     // Initialize socket connection
-    const socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000', {
-      transports: ['websocket', 'polling'],
+    const socketInstance = io(socketUrl, {
+      transports: ['websocket', 'polling'], // Try WebSocket first, fallback to polling
       autoConnect: options.autoConnect !== false,
       reconnection: options.reconnection !== false,
       reconnectionDelay: options.reconnectionDelay || 1000,
-      reconnectionAttempts: options.reconnectionAttempts || 5
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: options.reconnectionAttempts || Infinity,
+      timeout: 20000,
+      forceNew: false,
+      // Production settings
+      withCredentials: true,
+      extraHeaders: {
+        'Access-Control-Allow-Origin': '*'
+      }
     });
 
     socketRef.current = socketInstance;
@@ -39,6 +53,7 @@ export function useSocket(options: UseSocketOptions = {}) {
     // Connection event handlers
     socketInstance.on('connect', () => {
       console.log('✅ Socket connected:', socketInstance.id);
+      console.log('   Transport:', socketInstance.io.engine.transport.name);
       setIsConnected(true);
       setIsConnecting(false);
     });
@@ -46,32 +61,47 @@ export function useSocket(options: UseSocketOptions = {}) {
     socketInstance.on('disconnect', (reason) => {
       console.log('🔌 Socket disconnected:', reason);
       setIsConnected(false);
+      
+      // Auto-reconnect on unexpected disconnections
+      if (reason === 'io server disconnect') {
+        // Server forcefully disconnected, need manual reconnection
+        console.log('🔄 Manual reconnection required');
+        socketInstance.connect();
+      }
     });
 
     socketInstance.on('connect_error', (error) => {
-      console.warn('⚠️ Socket connection error (will retry):', error.message);
+      console.error('❌ Socket connection error:', error.message);
+      console.error('   Server URL:', socketUrl);
       setIsConnecting(false);
+      setIsConnected(false);
     });
 
-    socketInstance.on('reconnect_attempt', () => {
-      console.log('🔄 Socket reconnecting...');
+    socketInstance.on('reconnect_attempt', (attemptNumber) => {
+      console.log(`🔄 Socket reconnecting... (attempt ${attemptNumber})`);
       setIsConnecting(true);
     });
 
-    socketInstance.on('reconnect', () => {
-      console.log('✅ Socket reconnected');
+    socketInstance.on('reconnect', (attemptNumber) => {
+      console.log(`✅ Socket reconnected after ${attemptNumber} attempts`);
       setIsConnected(true);
+      setIsConnecting(false);
+    });
+
+    socketInstance.on('reconnect_failed', () => {
+      console.error('❌ Socket reconnection failed');
       setIsConnecting(false);
     });
 
     // Cleanup on unmount
     return () => {
       if (socketRef.current) {
+        console.log('🔌 Disconnecting socket on cleanup');
         socketRef.current.disconnect();
         socketRef.current = null;
       }
     };
-  }, []);
+  }, []); // Empty dependency array - connect once on mount
 
   return { socket, isConnected, isConnecting };
 }

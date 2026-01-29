@@ -5,8 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
+    "dev:standalone": "concurrently \"npm run dev:socket\" \"npm run dev:next\"",
+    "dev:next": "next dev -p 3001",
+    "dev:socket": "node socket-server.js",
     "build": "next build",
     "start": "NODE_ENV=production node server.js",
+    "start:socket": "node socket-server.js",
     "lint": "eslint"
   },
   "dependencies": {

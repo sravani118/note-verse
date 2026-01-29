@@ -21,6 +21,8 @@ interface Document {
   updatedAt: string;
   collaborators?: Array<{ name: string; avatar?: string }>;
   isShared?: boolean;
+  role?: string; // 'editor' or 'viewer'
+  owner?: { name: string; email: string };
 }
 
 export default function DashboardPage() {
