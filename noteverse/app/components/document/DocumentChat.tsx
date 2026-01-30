@@ -80,18 +80,23 @@ export default function DocumentChat({
           </div>
         ) : (
           <>
-            {messages.map((msg) => (
-              <ChatMessageItem
-                key={msg.id}
-                id={msg.id}
-                senderId={msg.senderId}
-                senderName={msg.senderName}
-                senderEmail={msg.senderEmail}
-                message={msg.message}
-                timestamp={msg.timestamp}
-                isOwnMessage={msg.senderId === currentUserId}
-              />
-            ))}
+            {messages.map((msg, index) => {
+              // Create a truly unique key combining multiple fields
+              const uniqueKey = msg.id || `msg-${msg.senderId}-${msg.timestamp?.getTime()}-${index}`;
+              
+              return (
+                <ChatMessageItem
+                  key={uniqueKey}
+                  id={msg.id}
+                  senderId={msg.senderId}
+                  senderName={msg.senderName}
+                  senderEmail={msg.senderEmail}
+                  message={msg.message}
+                  timestamp={msg.timestamp}
+                  isOwnMessage={msg.senderId === currentUserId}
+                />
+              );
+            })}
             {/* Scroll anchor */}
             <div ref={messagesEndRef} />
           </>
