@@ -70,9 +70,24 @@ export async function GET(
     
     console.log('📋 Found sharedWith entries:', sharedWith.length);
     
+    // Deduplicate by email (keep the highest permission level)
+    const deduplicatedShares = new Map<string, any>();
+    sharedWith.forEach((share: any) => {
+      const email = share.email?.toLowerCase();
+      if (!email) return;
+      
+      const existing = deduplicatedShares.get(email);
+      if (!existing || (share.role === 'editor' && existing.role === 'viewer')) {
+        deduplicatedShares.set(email, share);
+      }
+    });
+    
+    const uniqueShares = Array.from(deduplicatedShares.values());
+    console.log('✨ After deduplication:', uniqueShares.length, 'unique collaborators');
+    
     // Populate user details for each shared user
     const collaborators = await Promise.all(
-      sharedWith.map(async (share: any, index: number) => {
+      uniqueShares.map(async (share: any, index: number) => {
         let sharedWithUser = null;
         if (share.userId) {
           sharedWithUser = await db.collection('users').findOne({
@@ -215,16 +230,60 @@ export async function POST(
 
     // Check if already shared with this user
     const sharedWith = document.sharedWith || [];
-    const alreadyShared = sharedWith.some((share: any) => 
+    const existingShare = sharedWith.find((share: any) => 
       share.userId?.equals(recipientUser._id) || 
       share.email?.toLowerCase() === email.toLowerCase()
     );
 
-    if (alreadyShared) {
-      return NextResponse.json(
-        { error: 'Already has access' },
-        { status: 400 }
+    if (existingShare) {
+      // Remove all existing entries for this user first (to handle duplicates)
+      await db.collection('documents').updateOne(
+        { _id: docObjectId },
+        {
+          $pull: {
+            sharedWith: {
+              $or: [
+                { userId: recipientUser._id },
+                { email: email.toLowerCase() }
+              ]
+            }
+          } as any
+        }
       );
+
+      console.log(`🧹 Removed all existing entries for ${email}`);
+
+      // Now add back with the new permission
+      await db.collection('documents').updateOne(
+        { _id: docObjectId },
+        {
+          $push: {
+            sharedWith: {
+              userId: recipientUser._id,
+              email: email.toLowerCase(),
+              role: permission,
+              sharedAt: new Date()
+            }
+          } as any,
+          $set: {
+            updatedAt: new Date()
+          }
+        }
+      );
+
+      console.log(`✅ Updated ${email} to ${permission}`);
+
+      return NextResponse.json({
+        message: 'Access level updated successfully',
+        share: {
+          sharedWith: {
+            name: recipientUser.name,
+            email: recipientUser.email
+          },
+          role: permission,
+          sharedAt: new Date()
+        },
+      });
     }
 
     // Add user to document.sharedWith array

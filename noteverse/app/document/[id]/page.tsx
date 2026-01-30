@@ -117,6 +117,7 @@ export default function DocumentPage() {
   const [ownerEmail, setOwnerEmail] = useState('');
   const [visibility, setVisibility] = useState<'restricted' | 'public'>('restricted');
   const [publicPermission, setPublicPermission] = useState<'viewer' | 'editor'>('viewer');
+  const [hasPendingAccessRequest, setHasPendingAccessRequest] = useState(false);
 
   // Document Settings modal state
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -202,16 +203,36 @@ export default function DocumentPage() {
         const shareResponse = await fetch(`/api/documents/${documentId}/share`);
         if (shareResponse.ok) {
           const shareData = await shareResponse.json();
-          const userShare = shareData.collaborators?.find(
+          console.log('🔍 Share data:', shareData);
+          console.log('🔍 Looking for user:', session.user.email);
+          console.log('🔍 Collaborators:', shareData.collaborators);
+          
+          // Find ALL matching entries for this user
+          const userShares = shareData.collaborators?.filter(
             (s: { sharedWithEmail: string; permission: string }) => 
-              s.sharedWithEmail === session.user.email
+              s.sharedWithEmail?.toLowerCase() === session.user.email?.toLowerCase()
           );
 
-          if (userShare) {
-            setUserPermission(userShare.permission);
-            userPermissionRef.current = userShare.permission;
+          console.log('🔍 User shares found:', userShares);
+
+          if (userShares && userShares.length > 0) {
+            // Pick the highest permission: owner > editor > viewer
+            const highestPermission = userShares.reduce((highest: any, current: any) => {
+              const permissions = { owner: 3, editor: 2, viewer: 1 };
+              const currentLevel = permissions[current.permission as keyof typeof permissions] || 0;
+              const highestLevel = permissions[highest.permission as keyof typeof permissions] || 0;
+              return currentLevel > highestLevel ? current : highest;
+            });
+            
+            console.log('✅ Highest permission found:', highestPermission.permission);
+            setUserPermission(highestPermission.permission);
+            userPermissionRef.current = highestPermission.permission;
             return; // User has explicit shared access
+          } else {
+            console.log('❌ User not found in collaborators');
           }
+        } else {
+          console.log('❌ Share API failed:', shareResponse.status);
         }
 
         // Check if document is public (Anyone with the link)
@@ -439,7 +460,10 @@ export default function DocumentPage() {
    */
   const handleAutoSave = async (editor: Editor) => {
     // Don't auto-save if user only has viewer permission
-    if (userPermission === 'viewer') {
+    const currentPermission = userPermissionRef.current;
+    console.log('💾 Auto-save check - current permission:', currentPermission);
+    
+    if (currentPermission === 'viewer') {
       console.log('⚠️ Skipping auto-save: user has viewer permission only');
       return;
     }
@@ -477,11 +501,14 @@ export default function DocumentPage() {
         console.error('❌ Failed to auto-save:', {
           status: response.status,
           statusText: response.statusText,
-          error: errorData
+          error: errorData,
+          currentPermission: userPermissionRef.current,
+          userEmail: session?.user?.email
         });
         
         // Show user-friendly error message
         if (response.status === 403) {
+          console.error('🚫 Permission denied - Current permission:', userPermissionRef.current);
           toast.error('You do not have permission to edit this document');
         } else if (response.status === 401) {
           toast.error('Please log in to save changes');
@@ -744,6 +771,83 @@ export default function DocumentPage() {
   };
 
   /**
+   * Recheck user permissions (called after access request approval)
+   */
+  const recheckPermissions = useCallback(async () => {
+    if (!session?.user?.email) return;
+
+    try {
+      console.log('🔄 Rechecking user permissions...');
+      
+      // Check if user has explicit shared access
+      const shareResponse = await fetch(`/api/documents/${documentId}/share`);
+      if (shareResponse.ok) {
+        const shareData = await shareResponse.json();
+        const userShare = shareData.collaborators?.find(
+          (s: { sharedWithEmail: string; permission: string }) => 
+            s.sharedWithEmail === session.user.email
+        );
+
+        if (userShare) {
+          console.log('✅ Permission updated:', userShare.permission);
+          setUserPermission(userShare.permission);
+          userPermissionRef.current = userShare.permission;
+          setHasPendingAccessRequest(false);
+          
+          if (userShare.permission === 'editor' || userShare.permission === 'owner') {
+            toast.success('🎉 Access granted! Refreshing page...', { duration: 3000 });
+          }
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Error rechecking permissions:', error);
+      return false;
+    }
+  }, [session, documentId]);
+
+  /**
+   * Handle request edit access
+   */
+  const handleRequestAccess = async () => {
+    try {
+      const response = await fetch(`/api/documents/${documentId}/access-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setHasPendingAccessRequest(true);
+        toast.success('✅ Access request sent! We\'ll refresh automatically when approved.', { duration: 4000 });
+        
+        // Start polling for permission changes every 2 seconds
+        const pollInterval = setInterval(async () => {
+          const granted = await recheckPermissions();
+          if (granted) {
+            clearInterval(pollInterval);
+            // Reload the page to refresh editor state
+            setTimeout(() => window.location.reload(), 1000);
+          }
+        }, 2000);
+        
+        // Stop polling after 5 minutes
+        setTimeout(() => {
+          clearInterval(pollInterval);
+          setHasPendingAccessRequest(false);
+        }, 300000);
+      } else {
+        toast.error(data.error || 'Failed to send access request');
+      }
+    } catch (error) {
+      console.error('Error requesting access:', error);
+      toast.error('Failed to send access request');
+    }
+  };
+
+  /**
    * Handle sidebar open/close tracking
    */
   const handleSidebarStateChange = (isOpen: boolean, activeTab: string) => {
@@ -786,6 +890,8 @@ export default function DocumentPage() {
         documentId={documentId}
         editor={editor}
         isViewOnly={userPermission === 'viewer'}
+        userPermission={userPermission}
+        onRequestAccess={handleRequestAccess}
       />
 
       {/* Fixed Editor Toolbar - 48px height */}
