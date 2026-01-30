@@ -102,6 +102,14 @@ export async function GET(
         } else {
           // Check if user is in sharedWith array
           const sharedWith = document.sharedWith || [];
+          console.log(`🔍 Checking sharedWith array for user ${currentUser._id.toString()}:`, 
+            sharedWith.map((s: any) => ({ 
+              userId: s.userId?.toString(), 
+              email: s.email, 
+              role: s.role 
+            }))
+          );
+          
           const shareInfo = sharedWith.find((share: any) => 
             share.userId?.equals(currentUser._id)
           );
@@ -109,6 +117,9 @@ export async function GET(
           if (shareInfo) {
             hasAccess = true;
             userRole = shareInfo.role;
+            console.log(`✅ User found in sharedWith with role: ${userRole}`);
+          } else {
+            console.log(`❌ User not found in sharedWith array`);
           }
         }
       }

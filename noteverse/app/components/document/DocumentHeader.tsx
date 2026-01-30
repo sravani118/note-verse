@@ -15,6 +15,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import ThemeToggle from '../ThemeToggle';
+import { Bell, Check, X as XIcon } from 'lucide-react';
 
 interface User {
   id: string;
@@ -23,16 +24,25 @@ interface User {
   cursorColor: string;
 }
 
+interface AccessRequest {
+  _id: string;
+  requesterEmail: string;
+  requesterName: string;
+  createdAt: string;
+}
+
 interface DocumentHeaderProps {
   title: string;
   onTitleChange: (title: string) => void;
   saveStatus: 'saved' | 'saving' | 'unsaved';
   activeUsers: User[];
   onShare?: () => void;
-  onOpenSettings?: () => void; // Add callback for opening settings
-  documentId?: string; // Add document ID for download/copy operations
-  editor?: any; // Add editor instance for content export
-  isViewOnly?: boolean; // View-only mode indicator
+  onOpenSettings?: () => void;
+  documentId?: string;
+  editor?: any;
+  isViewOnly?: boolean;
+  userPermission?: 'viewer' | 'editor' | 'owner' | null;
+  onRequestAccess?: () => void;
 }
 
 export default function DocumentHeader({
@@ -44,11 +54,68 @@ export default function DocumentHeader({
   onOpenSettings,
   documentId,
   editor,
-  isViewOnly = false
+  isViewOnly = false,
+  userPermission = null,
+  onRequestAccess
 }: DocumentHeaderProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [localTitle, setLocalTitle] = useState(title);
   const [showMenu, setShowMenu] = useState(false);
+  const [showAccessRequests, setShowAccessRequests] = useState(false);
+  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+
+  // Sync local title with prop when it changes
+  useEffect(() => {
+    setLocalTitle(title);
+  }, [title]);
+
+  // Load access requests for owners
+  useEffect(() => {
+    if (userPermission === 'owner' && documentId) {
+      loadAccessRequests();
+    }
+  }, [userPermission, documentId]);
+
+  const loadAccessRequests = async () => {
+    if (!documentId) return;
+    
+    try {
+      const response = await fetch(`/api/documents/${documentId}/access-request`);
+      if (response.ok) {
+        const data = await response.json();
+        setAccessRequests(data.requests || []);
+      }
+    } catch (error) {
+      console.error('Error loading access requests:', error);
+    }
+  };
+
+  const handleAccessRequest = async (requestId: string, action: 'approve' | 'reject') => {
+    setLoadingRequests(true);
+    try {
+      const response = await fetch(`/api/documents/${documentId}/access-request/${requestId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success(data.message);
+        // Reload requests
+        await loadAccessRequests();
+      } else {
+        toast.error(data.error || 'Failed to process request');
+      }
+    } catch (error) {
+      console.error('Error processing access request:', error);
+      toast.error('Failed to process request');
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
 
   // Sync local title with prop when it changes
   useEffect(() => {
@@ -256,6 +323,85 @@ export default function DocumentHeader({
 
         {/* Right: Collaborators and Actions */}
         <div className="flex items-center gap-4">
+          {/* Access Requests Notification for Owners */}
+          {userPermission === 'owner' && accessRequests.length > 0 && (
+            <div className="relative">
+              <button
+                onClick={() => setShowAccessRequests(!showAccessRequests)}
+                className="relative p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                title="Access requests"
+              >
+                <Bell className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+                {accessRequests.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                    {accessRequests.length}
+                  </span>
+                )}
+              </button>
+
+              {/* Access Requests Dropdown */}
+              {showAccessRequests && (
+                <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50">
+                  <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                      Edit Access Requests ({accessRequests.length})
+                    </h3>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto">
+                    {accessRequests.map((request) => (
+                      <div 
+                        key={request._id}
+                        className="p-4 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                              {request.requesterName}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              {request.requesterEmail}
+                            </p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                              {new Date(request.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="flex gap-2 ml-3">
+                            <button
+                              onClick={() => handleAccessRequest(request._id, 'approve')}
+                              disabled={loadingRequests}
+                              className="p-1.5 bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-900/50 text-green-700 dark:text-green-400 rounded-md transition-colors disabled:opacity-50"
+                              title="Approve"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleAccessRequest(request._id, 'reject')}
+                              disabled={loadingRequests}
+                              className="p-1.5 bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-700 dark:text-red-400 rounded-md transition-colors disabled:opacity-50"
+                              title="Reject"
+                            >
+                              <XIcon className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Request edit access button for viewers */}
+          {userPermission === 'viewer' && onRequestAccess && (
+            <button
+              onClick={onRequestAccess}
+              className="px-4 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
+            >
+              Request edit access
+            </button>
+          )}
+          
           {/* Active Collaborators - Circular avatars */}
           <div className="flex items-center gap-2">
             <div className="flex -space-x-2">

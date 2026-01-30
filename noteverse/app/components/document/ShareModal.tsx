@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Link2, Check, Globe, Lock, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Dropdown from '@/app/components/Dropdown';
@@ -13,6 +13,11 @@ interface Collaborator {
     name?: string;
     email?: string;
   };
+}
+
+interface UserSuggestion {
+  email: string;
+  name?: string;
 }
 
 interface ShareModalProps {
@@ -43,6 +48,13 @@ export default function ShareModal({
   const [generalAccess, setGeneralAccess] = useState<'restricted' | 'public'>(visibility);
   const [generalPermission, setGeneralPermission] = useState<'viewer' | 'editor'>(publicPermission);
   const [showGeneralDropdown, setShowGeneralDropdown] = useState(false);
+  
+  // User suggestions for autocomplete
+  const [userSuggestions, setUserSuggestions] = useState<UserSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
 
   const loadCollaborators = useCallback(async () => {
     try {
@@ -60,22 +72,107 @@ export default function ShareModal({
     loadCollaborators();
   }, [loadCollaborators]);
 
-  // Close dropdown when clicking outside
+  // Search users for autocomplete
+  const searchUsers = useCallback(async (query: string) => {
+    if (query.length < 2) {
+      setUserSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setUserSuggestions(data.users || []);
+        setShowSuggestions(data.users?.length > 0);
+      }
+    } catch (error) {
+      console.error('Error searching users:', error);
+    }
+  }, []);
+
+  // Debounce user search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (email) {
+        searchUsers(email);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [email, searchUsers]);
+
+  // Handle email input change
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    setSelectedSuggestionIndex(-1);
+  };
+
+  // Handle suggestion selection
+  const handleSelectSuggestion = (suggestion: UserSuggestion) => {
+    setEmail(suggestion.email);
+    setShowSuggestions(false);
+    setUserSuggestions([]);
+    inputRef.current?.focus();
+  };
+
+  // Handle keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showSuggestions) {
+      if (e.key === 'Enter') {
+        handleInvite();
+      }
+      return;
+    }
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedSuggestionIndex(prev => 
+          prev < userSuggestions.length - 1 ? prev + 1 : prev
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedSuggestionIndex >= 0) {
+          handleSelectSuggestion(userSuggestions[selectedSuggestionIndex]);
+        } else {
+          handleInvite();
+        }
+        break;
+      case 'Escape':
+        setShowSuggestions(false);
+        break;
+    }
+  };
+
+  // Close suggestions when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
+      if (
+        suggestionsRef.current && 
+        !suggestionsRef.current.contains(e.target as Node) &&
+        inputRef.current &&
+        !inputRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+      
       if (showGeneralDropdown) {
         setShowGeneralDropdown(false);
       }
     };
 
-    if (showGeneralDropdown) {
-      document.addEventListener('click', handleClickOutside);
-    }
-
+    document.addEventListener('click', handleClickOutside);
     return () => {
       document.removeEventListener('click', handleClickOutside);
     };
-  }, [showGeneralDropdown]);
+  }, [showSuggestions, showGeneralDropdown]);
 
   const handleInvite = async () => {
     if (!email.trim() || !isOwner) return;
@@ -106,16 +203,20 @@ export default function ShareModal({
     }
   };
 
-  const handleUpdatePermission = async (shareId: string, newPermission: string) => {
+  const handleUpdatePermission = async (collabEmail: string, newPermission: string) => {
     if (!isOwner) return;
 
     try {
-      console.log('🔄 Updating permission:', { shareId, newPermission, documentId });
+      console.log('🔄 Updating permission:', { collabEmail, newPermission, documentId });
       
-      const response = await fetch(`/api/documents/${documentId}/share/${shareId}`, {
-        method: 'PATCH',
+      // Use the POST endpoint which now handles updates
+      const response = await fetch(`/api/documents/${documentId}/share`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ permission: newPermission }),
+        body: JSON.stringify({ 
+          email: collabEmail, 
+          permission: newPermission 
+        }),
       });
 
       if (response.ok) {
@@ -244,19 +345,52 @@ export default function ShareModal({
           {/* Add people section */}
           {isOwner && (
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex gap-2">
-                <input
-                  type="email"
-                  placeholder="Add people, groups"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleInvite()}
-                  disabled={loading}
-                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg 
-                           bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-                           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                           disabled:opacity-50 disabled:cursor-not-allowed"
-                />
+              <div className="flex gap-2 relative">
+                <div className="flex-1 relative">
+                  <input
+                    ref={inputRef}
+                    type="email"
+                    placeholder="Add people, groups"
+                    value={email}
+                    onChange={(e) => handleEmailChange(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    disabled={loading}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg 
+                             bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                             focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                             disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  
+                  {/* User suggestions dropdown */}
+                  {showSuggestions && userSuggestions.length > 0 && (
+                    <div 
+                      ref={suggestionsRef}
+                      className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                    >
+                      {userSuggestions.map((suggestion, index) => (
+                        <div
+                          key={suggestion.email}
+                          onClick={() => handleSelectSuggestion(suggestion)}
+                          className={`px-3 py-2 cursor-pointer transition-colors ${
+                            index === selectedSuggestionIndex
+                              ? 'bg-blue-50 dark:bg-blue-900/20'
+                              : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {suggestion.name || suggestion.email}
+                          </div>
+                          {suggestion.name && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              {suggestion.email}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
                 <Dropdown
                   value={permission}
                   onChange={(val) => setPermission(val as 'editor' | 'viewer')}
@@ -300,7 +434,7 @@ export default function ShareModal({
 
               {/* Collaborators */}
               {collaborators.map((collab, index) => (
-                <div key={collab._id || `collab-${collab.sharedWithEmail}-${index}`} className="flex items-center gap-3 py-2 group hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg px-2 -mx-2 transition-colors">
+                <div key={`${collab._id}-${collab.sharedWithEmail}-${index}`} className="flex items-center gap-3 py-2 group hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg px-2 -mx-2 transition-colors">
                   <div className={`w-10 h-10 rounded-full ${getAvatarColor(collab.sharedWithEmail)} flex items-center justify-center text-white font-semibold`}>
                     {getInitials(collab.sharedWith?.name, collab.sharedWithEmail)}
                   </div>
@@ -316,7 +450,7 @@ export default function ShareModal({
                     <div className="flex items-center gap-2">
                       <Dropdown
                         value={collab.permission}
-                        onChange={(val) => handleUpdatePermission(collab._id, val)}
+                        onChange={(val) => handleUpdatePermission(collab.sharedWithEmail, val)}
                         options={[
                           { value: 'viewer', label: 'Viewer' },
                           { value: 'editor', label: 'Editor' }
