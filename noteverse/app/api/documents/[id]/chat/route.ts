@@ -88,11 +88,11 @@ export async function GET(
 
     const isOwner = document.owner.toString() === user._id.toString();
     
-    // Check if user has shared access
-    const shareAccess = await db.collection('documentshares').findOne({
-      documentId: docObjectId,
-      sharedWithEmail: session.user.email
-    });
+    // Check if user has shared access from sharedWith array
+    const sharedWith = document.sharedWith || [];
+    const shareAccess = sharedWith.find((share: any) => 
+      share.email === session.user.email || share.userId?.equals(user._id)
+    );
 
     // Check if document is public
     const hasPublicAccess = document.visibility === 'public';
@@ -208,10 +208,11 @@ export async function POST(
 
     const isOwner = document.owner.toString() === user._id.toString();
     
-    const shareAccess = await db.collection('documentshares').findOne({
-      documentId: docObjectId,
-      sharedWithEmail: session.user.email
-    });
+    // Check if user has shared access from sharedWith array
+    const sharedWith = document.sharedWith || [];
+    const shareAccess = sharedWith.find((share: any) => 
+      share.email === session.user.email || share.userId?.equals(user._id)
+    );
 
     const hasPublicAccess = document.visibility === 'public';
 
@@ -222,7 +223,7 @@ export async function POST(
     // Check if user has permission to send messages (editors and owners only)
     let canSendMessage = isOwner;
     
-    if (shareAccess && shareAccess.permission === 'editor') {
+    if (shareAccess && shareAccess.role === 'editor') {
       canSendMessage = true;
     }
     
@@ -233,7 +234,7 @@ export async function POST(
     console.log('Chat permission check:', {
       isOwner,
       hasShareAccess: !!shareAccess,
-      sharePermission: shareAccess?.permission,
+      shareRole: shareAccess?.role,
       hasPublicAccess,
       publicPermission: document.publicPermission,
       canSendMessage

@@ -45,11 +45,27 @@ interface TipTapEditorProps {
   onReady?: (editor: TipTapEditorInstance) => void;
   provider?: unknown; // Yjs provider for awareness
   readOnly?: boolean; // Whether editor is read-only (view-only permission)
+  initialContent?: string; // Initial document content to load
+  documentId?: string; // Document ID to track document changes
 }
 
-export default function TipTapEditor({ ydoc, currentUser, onReady, readOnly = false }: TipTapEditorProps) {
+export default function TipTapEditor({ ydoc, currentUser, onReady, readOnly = false, initialContent = '', documentId }: TipTapEditorProps) {
   const hasCalledOnReady = useRef(false);
-  const hasLoadedContent = useRef(false); // Track if initial content has been loaded
+  const loadedContentRef = useRef<string | null>(null); // Track what content was loaded, not just boolean
+  const previousDocumentId = useRef<string | undefined>(documentId);
+  
+  // Reset loaded content when document changes
+  useEffect(() => {
+    if (documentId && previousDocumentId.current !== documentId) {
+      console.log('🔄 Document ID changed, resetting loaded content:', {
+        previousDocId: previousDocumentId.current,
+        newDocId: documentId
+      });
+      loadedContentRef.current = null;
+      hasCalledOnReady.current = false;
+      previousDocumentId.current = documentId;
+    }
+  }, [documentId]);
   
   // Memoize extensions to prevent duplicate registration
   const extensions = useMemo(() => {
@@ -134,37 +150,63 @@ export default function TipTapEditor({ ydoc, currentUser, onReady, readOnly = fa
     immediatelyRender: false,
     shouldRerenderOnTransaction: false,
     extensions: extensions as any,
-    editable: !readOnly, // Make editor non-editable if readOnly is true
+    editable: !readOnly,
     editorProps: {
       attributes: {
         class: 'prose prose-lg dark:prose-invert max-w-none focus:outline-none min-h-[600px]',
       },
     },
-  });
+  }, [ydoc]); // Recreate editor when ydoc changes (different document)
 
   useEffect(() => {
-    if (!editor || !ydoc) return;
+    console.log('🔍 TipTapEditor content loading effect:', {
+      hasEditor: !!editor,
+      hasYdoc: !!ydoc,
+      loadedContent: loadedContentRef.current,
+      loadedContentLength: loadedContentRef.current?.length || 0,
+      initialContent: initialContent,
+      initialContentLength: initialContent?.length || 0,
+      areEqual: loadedContentRef.current === initialContent,
+      needsLoad: loadedContentRef.current !== initialContent
+    });
+    
+    if (!editor) {
+      console.log('⏭️ Skipping - editor not ready');
+      return;
+    }
 
-    // Load initial content from Yjs metadata if available (only once)
-    if (!hasLoadedContent.current) {
-      const metadata = ydoc.getMap('metadata');
-      const initialContent = metadata.get('initialContent');
-      
-      if (initialContent && typeof initialContent === 'string') {
+    // Load content if it's different from what was previously loaded
+    const needsLoad = loadedContentRef.current !== initialContent;
+    
+    if (needsLoad) {
+      if (initialContent && initialContent.length > 0) {
         console.log(`📄 Loading ${initialContent.length} characters of saved content into editor`);
-        editor.commands.setContent(initialContent);
-        metadata.delete('initialContent'); // Clear after loading
-        hasLoadedContent.current = true;
-        console.log('✅ Content loaded into editor');
+        console.log(`📄 Content preview:`, initialContent.substring(0, 100));
+        console.log(`📄 Full content:`, initialContent);
+        
+        // Use a small delay to ensure Collaboration extension is ready
+        setTimeout(() => {
+          if (editor && !editor.isDestroyed) {
+            editor.commands.setContent(initialContent);
+            loadedContentRef.current = initialContent;
+            console.log('✅ Content loaded into editor successfully');
+          }
+        }, 100);
+      } else {
+        console.log('ℹ️ No initial content to load (empty or new document)');
+        loadedContentRef.current = initialContent; // Store the empty string
       }
+    } else {
+      console.log('⏭️ Content already loaded, skipping (same content)');
     }
 
     // Notify parent when editor is ready (only once)
-    if (onReady && !hasCalledOnReady.current) {
+    if (onReady && !hasCalledOnReady.current && editor) {
       hasCalledOnReady.current = true;
+      console.log('📞 Calling onReady callback');
       onReady(editor);
     }
-  }, [editor, ydoc, onReady]);
+  }, [editor, onReady, initialContent]);
 
   // Update editable state when readOnly changes
   useEffect(() => {

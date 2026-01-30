@@ -72,8 +72,11 @@ export default function RightSidebar({
 
   // Get user initials
   const getInitials = (name: string) => {
+    if (!name || !name.trim()) return '?';
     return name
+      .trim()
       .split(' ')
+      .filter(n => n.length > 0)
       .map(n => n[0])
       .join('')
       .toUpperCase()

@@ -110,6 +110,8 @@ export default function ShareModal({
     if (!isOwner) return;
 
     try {
+      console.log('🔄 Updating permission:', { shareId, newPermission, documentId });
+      
       const response = await fetch(`/api/documents/${documentId}/share/${shareId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -120,10 +122,16 @@ export default function ShareModal({
         await loadCollaborators();
         toast.success('Permission updated');
       } else {
-        toast.error('Failed to update permission');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Failed to update permission:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+        toast.error(errorData.error || 'Failed to update permission');
       }
     } catch (error) {
-      console.error('Failed to update permission:', error);
+      console.error('❌ Exception updating permission:', error);
       toast.error('Failed to update permission');
     }
   };
@@ -188,9 +196,11 @@ export default function ShareModal({
   };
 
   const getInitials = (name?: string, email?: string) => {
-    if (name) {
+    if (name && name.trim()) {
       return name
+        .trim()
         .split(' ')
+        .filter(n => n.length > 0)
         .map(n => n[0])
         .join('')
         .toUpperCase()
@@ -208,6 +218,7 @@ export default function ShareModal({
       'bg-orange-500',
       'bg-teal-500',
     ];
+    if (!email) return colors[0];
     const index = email.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     return colors[index % colors.length];
   };
@@ -288,8 +299,8 @@ export default function ShareModal({
               </div>
 
               {/* Collaborators */}
-              {collaborators.map((collab) => (
-                <div key={collab._id} className="flex items-center gap-3 py-2 group">
+              {collaborators.map((collab, index) => (
+                <div key={collab._id || `collab-${collab.sharedWithEmail}-${index}`} className="flex items-center gap-3 py-2 group hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg px-2 -mx-2 transition-colors">
                   <div className={`w-10 h-10 rounded-full ${getAvatarColor(collab.sharedWithEmail)} flex items-center justify-center text-white font-semibold`}>
                     {getInitials(collab.sharedWith?.name, collab.sharedWithEmail)}
                   </div>
@@ -302,7 +313,7 @@ export default function ShareModal({
                     </div>
                   </div>
                   {isOwner && collab.permission !== 'owner' ? (
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2">
                       <Dropdown
                         value={collab.permission}
                         onChange={(val) => handleUpdatePermission(collab._id, val)}
@@ -314,7 +325,8 @@ export default function ShareModal({
                       />
                       <button
                         onClick={() => handleRemoveCollaborator(collab._id)}
-                        className="px-2 py-1 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150"
+                        title="Remove access"
                       >
                         Remove
                       </button>

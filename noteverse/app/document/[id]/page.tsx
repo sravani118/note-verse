@@ -76,7 +76,14 @@ export default function DocumentPage() {
       console.log(`  [${idx}] ${msg.senderName}: ${msg.message} (${msg.timestamp})`);
     });
   }, [chatMessages]);
-
+  // Debug: Track documentContent changes
+  useEffect(() => {
+    console.log('📝 documentContent state changed:', {
+      length: documentContent?.length || 0,
+      preview: documentContent?.substring(0, 100),
+      fullContent: documentContent
+    });
+  }, [documentContent]);
   // Tab state - Each tab has independent content stored as HTML
   const [tabs, setTabs] = useState<Tab[]>([
     { id: 'tab-1', name: 'Tab 1', content: '' }
@@ -99,13 +106,14 @@ export default function DocumentPage() {
     }
   }, [editor, activeTabId]);
 
-  // Auto-save timeout
-  const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  // Auto-save timeout - use ref instead of state for proper closure handling
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Share modal state
   const [showShareModal, setShowShareModal] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [userPermission, setUserPermission] = useState<'viewer' | 'editor' | 'owner' | null>(null);
+  const userPermissionRef = useRef<'viewer' | 'editor' | 'owner' | null>(null); // Ref for latest value in closures
   const [ownerEmail, setOwnerEmail] = useState('');
   const [visibility, setVisibility] = useState<'restricted' | 'public'>('restricted');
   const [publicPermission, setPublicPermission] = useState<'viewer' | 'editor'>('viewer');
@@ -154,6 +162,8 @@ export default function DocumentPage() {
           title: docTitle,
           isNew: isNewDoc,
           contentLength: docContent.length,
+          contentPreview: docContent.substring(0, 100),
+          rawContent: docContent,
           rawTitle: docData.document?.title,
           alreadyLoaded: contentLoadedRef.current 
         });
@@ -163,7 +173,10 @@ export default function DocumentPage() {
         setPublicPermission(docPublicPermission);
         setDocumentTitle(docTitle);
         documentTitleRef.current = docTitle; // Keep ref in sync
+        
+        console.log('🔄 Setting documentContent state with content length:', docContent.length);
         setDocumentContent(docContent); // Store content in state
+        console.log('✅ documentContent state set');
         
         // Load editor settings from document
         if (docData.document?.settings) {
@@ -181,6 +194,7 @@ export default function DocumentPage() {
 
         if (isDocOwner) {
           setUserPermission('owner');
+          userPermissionRef.current = 'owner';
           return; // Owner has full access
         }
 
@@ -195,6 +209,7 @@ export default function DocumentPage() {
 
           if (userShare) {
             setUserPermission(userShare.permission);
+            userPermissionRef.current = userShare.permission;
             return; // User has explicit shared access
           }
         }
@@ -203,6 +218,7 @@ export default function DocumentPage() {
         if (docVisibility === 'public') {
           // User can access via public link
           setUserPermission(docPublicPermission as 'viewer' | 'editor');
+          userPermissionRef.current = docPublicPermission as 'viewer' | 'editor';
           return;
         }
 
@@ -306,18 +322,6 @@ export default function DocumentPage() {
       setActiveUsers(mappedUsers);
     }
   });
-
-  // Load document content into Yjs when ydoc becomes available
-  useEffect(() => {
-    if (!ydoc || !documentContent || contentLoadedRef.current) {
-      return;
-    }
-
-    console.log(`📥 Loading content into Yjs (${documentContent.length} characters)`);
-    const metadata = ydoc.getMap('metadata');
-    metadata.set('initialContent', documentContent);
-    console.log('✅ Content stored in Yjs metadata, will be loaded by editor when ready');
-  }, [ydoc, documentContent]);
 
   /**
    * Socket.io chat event listeners
@@ -434,6 +438,12 @@ export default function DocumentPage() {
    * Auto-save document content
    */
   const handleAutoSave = async (editor: Editor) => {
+    // Don't auto-save if user only has viewer permission
+    if (userPermission === 'viewer') {
+      console.log('⚠️ Skipping auto-save: user has viewer permission only');
+      return;
+    }
+    
     try {
       setSaveStatus('saving');
       
@@ -463,15 +473,38 @@ export default function DocumentPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('❌ Failed to auto-save:', errorData);
-        throw new Error('Failed to save document');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('❌ Failed to auto-save:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+        
+        // Show user-friendly error message
+        if (response.status === 403) {
+          toast.error('You do not have permission to edit this document');
+        } else if (response.status === 401) {
+          toast.error('Please log in to save changes');
+        } else {
+          toast.error('Failed to save document. Please try again.');
+        }
+        
+        throw new Error(errorData.error || 'Failed to save document');
       }
       
       const result = await response.json();
       console.log('✅ Document auto-saved:', result);
+      
+      // Update state to reflect save
       setSaveStatus('saved');
       setLastSaved(new Date());
+      
+      // Log confirmation with timestamp
+      console.log('💾 Save confirmed at:', new Date().toISOString(), {
+        contentLength: content.length,
+        wordCount,
+        charCount
+      });
     } catch (error) {
       console.error('Error saving document:', error);
       setSaveStatus('unsaved');
@@ -485,29 +518,13 @@ export default function DocumentPage() {
     console.log('🎯 Editor ready callback triggered');
     setEditor(editorInstance);
     
-    // Load initial content from Yjs metadata if available and not already loaded
-    if (ydoc && !contentLoadedRef.current) {
-      const metadata = ydoc.getMap('metadata');
-      const initialContent = metadata.get('initialContent');
-      
-      if (initialContent && typeof initialContent === 'string') {
-        console.log(`📄 [handleEditorReady] Loading ${initialContent.length} characters of saved content into editor`);
-        editorInstance.commands.setContent(initialContent);
-        metadata.delete('initialContent');
-        contentLoadedRef.current = true;
-        console.log('✅ Content loaded via handleEditorReady');
-      } else {
-        console.log('ℹ️ No initial content found in metadata');
-      }
-    }
-    
     // Apply initial editor settings
     if (editorSettings.defaultFont) {
       editorInstance.chain().focus().setFontFamily(editorSettings.defaultFont).run();
     }
     if (editorSettings.defaultFontSize) {
       const fontSize = `${editorSettings.defaultFontSize}px`;
-      editorInstance.chain().focus().selectAll().setMark('textStyle', { fontSize }).run();
+      editorInstance.chain().focus().selectAll().setMark('textStyle', { fontSize }).blur().run();
     }
     
     // Listen for content changes
@@ -517,38 +534,73 @@ export default function DocumentPage() {
       const words = text.trim() ? text.trim().split(/\s+/).length : 0;
       const chars = text.length;
       
+      const currentPermission = userPermissionRef.current;
+      console.log('📝 Editor content updated:', {
+        words,
+        chars,
+        userPermission: currentPermission,
+        willAutoSave: currentPermission === 'owner' || currentPermission === 'editor'
+      });
+      
       setWordCount(words);
       setCharCount(chars);
 
-      // Trigger auto-save
-      setSaveStatus('unsaved');
-      
-      // Debounce save
-      const timeout = setTimeout(() => {
-        handleAutoSave(editor);
-      }, 2000); // Save after 2 seconds of inactivity
-      
-      setSaveTimeout(timeout);
+      // Only trigger auto-save if user has edit permission (owner or editor)
+      if (currentPermission === 'owner' || currentPermission === 'editor') {
+        // Trigger auto-save
+        setSaveStatus('unsaved');
+        
+        // Clear previous timeout
+        if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current);
+        }
+        
+        // Debounce save
+        saveTimeoutRef.current = setTimeout(() => {
+          console.log('⏰ Auto-save timeout triggered, calling handleAutoSave');
+          handleAutoSave(editor);
+        }, 2000); // Save after 2 seconds of inactivity
+      } else {
+        console.log('⚠️ Skipping auto-save - user does not have edit permission');
+      }
     });
     
     console.log('✅ Editor ready - initial settings applied');
   }, [editorSettings, ydoc]);
+
+  // Cleanup auto-save timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        console.log('🧹 Cleaning up auto-save timeout');
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   /**
    * Handle document title change
    */
   const handleTitleChange = async (newTitle: string) => {
     console.log('📝 Title change requested:', { oldTitle: documentTitle, newTitle });
+    
+    // Don't allow title change if user only has viewer permission
+    if (userPermission === 'viewer') {
+      console.log('⚠️ Skipping title change: user has viewer permission only');
+      toast.error('You do not have permission to edit this document');
+      return;
+    }
+    
     setDocumentTitle(newTitle);
     documentTitleRef.current = newTitle; // Keep ref in sync
     setSaveStatus('unsaved');
     
     // Debounce title save
-    if (saveTimeout) {
-      clearTimeout(saveTimeout);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
     }
     
-    const timeout = setTimeout(async () => {
+    saveTimeoutRef.current = setTimeout(async () => {
       try {
         setSaveStatus('saving');
         console.log('💾 Saving title to API:', newTitle);
@@ -576,8 +628,6 @@ export default function DocumentPage() {
         toast.error('Failed to save title');
       }
     }, 1000);
-    
-    setSaveTimeout(timeout);
   };
 
   /**
@@ -735,6 +785,7 @@ export default function DocumentPage() {
         onOpenSettings={() => setShowSettingsModal(true)}
         documentId={documentId}
         editor={editor}
+        isViewOnly={userPermission === 'viewer'}
       />
 
       {/* Fixed Editor Toolbar - 48px height */}
@@ -742,6 +793,7 @@ export default function DocumentPage() {
         editor={editor} 
         currentFont={editorSettings.defaultFont}
         currentFontSize={editorSettings.defaultFontSize}
+        readOnly={userPermission === 'viewer'}
       />
 
       {/* Left Sidebar - Document Tabs */}
@@ -771,19 +823,9 @@ export default function DocumentPage() {
               onReady={handleEditorReady}
               provider={null}
               readOnly={userPermission === 'viewer'}
+              initialContent={documentContent}
+              documentId={documentId}
             />
-            {/* Read-only banner - only show after permission is determined */}
-            {userPermission === 'viewer' && (
-              <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-blue-500 text-white px-6 py-2 rounded-lg shadow-lg z-40">
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                  <span className="font-medium">View-only mode</span>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </main>
