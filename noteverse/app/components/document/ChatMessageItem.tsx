@@ -32,8 +32,11 @@ export default function ChatMessageItem({
    * Get user initials from name
    */
   const getInitials = (name: string) => {
+    if (!name || !name.trim()) return '?';
     return name
+      .trim()
       .split(' ')
+      .filter(n => n.length > 0)
       .map(n => n[0])
       .join('')
       .toUpperCase()
@@ -54,6 +57,7 @@ export default function ChatMessageItem({
       '#EC4899', // Pink
       '#14B8A6', // Teal
     ];
+    if (!email) return colors[0];
     const index = email.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     return colors[index % colors.length];
   };

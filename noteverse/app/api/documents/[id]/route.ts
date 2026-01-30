@@ -35,13 +35,13 @@ export async function GET(
       document = await db.collection('documents').findOne({
         _id: new ObjectId(documentId)
       });
-      console.log(`🔍 GET document by ObjectId ${documentId}:`, document ? `Found (title: "${document.title}")` : 'Not found');
+      console.log(`🔍 GET document by ObjectId ${documentId}:`, document ? `Found (title: "${document.title}", content length: ${document.content?.length || 0})` : 'Not found');
     } else {
       // Custom string ID (e.g., doc-1769406684982-dkluhj1r6)
       document = await db.collection('documents').findOne({
         customId: documentId
       });
-      console.log(`🔍 GET document by customId ${documentId}:`, document ? `Found (title: "${document.title}")` : 'Not found');
+      console.log(`🔍 GET document by customId ${documentId}:`, document ? `Found (title: "${document.title}", content length: ${document.content?.length || 0})` : 'Not found');
     }
 
     if (!document) {
@@ -128,6 +128,8 @@ export async function GET(
       );
     }
 
+    console.log(`📤 Returning document content: ${document.content?.length || 0} characters`);
+    
     return NextResponse.json({
       success: true,
       document: {
@@ -185,7 +187,10 @@ export async function PUT(
 
     // Handle guest users (no session) or authenticated users
     let userId: ObjectId | null = null;
+    let userEmail: string | null = null;
+    
     if (session?.user?.email) {
+      userEmail = session.user.email;
       // Try to find user by email
       const user = await db.collection('users').findOne({
         email: session.user.email
@@ -195,6 +200,9 @@ export async function PUT(
       } else if (session.user.id && ObjectId.isValid(session.user.id)) {
         // Fallback to session ID if user not found by email
         userId = new ObjectId(session.user.id);
+      } else {
+        console.log(`⚠️ User not found in database: ${session.user.email}`);
+        // User has session but no user record - this shouldn't happen for shared docs
       }
     }
 
@@ -247,17 +255,31 @@ export async function PUT(
     }
 
     console.log(`📄 Updating existing document. Current title: "${currentDocument.title}"`);
+    console.log(`🔐 Access check:`, { 
+      userId: userId?.toString(), 
+      userEmail, 
+      hasSession: !!session,
+      documentOwner: currentDocument.owner?.toString(),
+      sharedWithCount: currentDocument.sharedWith?.length || 0
+    });
     
-    // Check permissions
-    if (userId && currentDocument.owner) {
-      const isOwner = currentDocument.owner.equals(userId);
+    // Check permissions - Must have userId OR valid session for shared docs
+    if (currentDocument.owner) {
+      const isOwner = userId && currentDocument.owner.equals(userId);
       
       if (!isOwner) {
         // Check if user has edit permission in sharedWith array
         const sharedWith = currentDocument.sharedWith || [];
         const shareInfo = sharedWith.find((share: any) => 
-          share.userId?.equals(userId)
+          (userId && share.userId?.equals(userId)) || 
+          (userEmail && share.email === userEmail)
         );
+        
+        console.log(`🔍 Share lookup for ${userEmail}:`, { 
+          foundShare: !!shareInfo, 
+          shareRole: shareInfo?.role,
+          sharedWithEmails: sharedWith.map((s: any) => s.email)
+        });
         
         const hasEditAccess = shareInfo && shareInfo.role === 'editor';
         
@@ -267,12 +289,19 @@ export async function PUT(
           currentDocument.publicPermission === 'editor';
 
         if (!hasEditAccess && !hasPublicEditAccess) {
+          console.log(`❌ Edit access denied for ${userEmail || 'unknown user'}`);
           return NextResponse.json(
             { error: 'Edit access denied. You only have viewer permission.' },
             { status: 403 }
           );
         }
+        
+        console.log(`✅ Edit access granted for ${userEmail}: ${hasEditAccess ? 'shared editor' : 'public editor'}`);
+      } else {
+        console.log(`✅ Edit access granted for ${userEmail}: owner`);
       }
+    } else {
+      console.log(`⚠️ Document has no owner, allowing save for authenticated user`);
     }
 
     // Update document
@@ -285,14 +314,22 @@ export async function PUT(
     if (wordCount !== undefined) updateData.wordCount = wordCount;
     if (characterCount !== undefined) updateData.characterCount = characterCount;
 
-    console.log(`💾 Updating document with:`, updateData);
+    console.log(`💾 Updating document with:`, { 
+      title: updateData.title, 
+      contentLength: updateData.content?.length || 0,
+      wordCount: updateData.wordCount,
+      characterCount: updateData.characterCount 
+    });
 
-    await db.collection('documents').updateOne(
+    const updateResult = await db.collection('documents').updateOne(
       { _id: docObjectId },
       { $set: updateData }
     );
 
-    console.log(`✅ Document updated successfully`);
+    console.log(`✅ Document updated successfully:`, { 
+      matched: updateResult.matchedCount, 
+      modified: updateResult.modifiedCount 
+    });
 
     // Create version snapshot (auto-save every 5 minutes or manual save) - only for authenticated users
     if (userId && content) {

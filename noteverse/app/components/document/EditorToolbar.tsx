@@ -22,6 +22,7 @@ interface EditorToolbarProps {
   editor: Editor | null;
   currentFont?: string;
   currentFontSize?: string;
+  readOnly?: boolean;
 }
 
 // Toolbar button component
@@ -43,9 +44,9 @@ const ToolbarButton = ({
     disabled={disabled}
     title={title}
     className={`
-      p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors
+      p-2 rounded transition-colors
       ${isActive ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300'}
-      ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+      ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}
     `}
   >
     {children}
@@ -57,7 +58,7 @@ const Divider = () => (
   <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1"></div>
 );
 
-export default function EditorToolbar({ editor, currentFont = 'Arial', currentFontSize = '14' }: EditorToolbarProps) {
+export default function EditorToolbar({ editor, currentFont = 'Arial', currentFontSize = '14', readOnly = false }: EditorToolbarProps) {
   const [showFontDropdown, setShowFontDropdown] = useState(false);
   const [showSizeDropdown, setShowSizeDropdown] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -66,6 +67,9 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
   if (!editor) {
     return null;
   }
+  
+  // Disable all interactions in read-only mode
+  const isDisabled = readOnly || !editor.isEditable;
 
   const fonts = [
     'Default',
@@ -208,7 +212,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         <div className="flex items-center gap-0.5">
           <ToolbarButton
             onClick={() => editor.chain().focus().undo().run()}
-            disabled={!editor.can().undo()}
+            disabled={isDisabled || !editor.can().undo()}
             title="Undo (Ctrl+Z)"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -218,7 +222,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
 
           <ToolbarButton
             onClick={() => editor.chain().focus().redo().run()}
-            disabled={!editor.can().redo()}
+            disabled={isDisabled || !editor.can().redo()}
             title="Redo (Ctrl+Y)"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -234,8 +238,13 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
           {/* Font Family Dropdown */}
           <div className="relative">
             <button
-              onClick={() => setShowFontDropdown(!showFontDropdown)}
-              className="h-8 px-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex items-center gap-1 min-w-[110px] border border-gray-300 dark:border-gray-600"
+              onClick={() => !isDisabled && setShowFontDropdown(!showFontDropdown)}
+              disabled={isDisabled}
+              className={`h-8 px-2 text-sm rounded transition-colors flex items-center gap-1 min-w-[110px] border ${
+                isDisabled 
+                  ? 'text-gray-400 dark:text-gray-600 border-gray-200 dark:border-gray-700 cursor-not-allowed opacity-50'
+                  : 'text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
               title="Font family"
             >
               <span className="truncate">{currentFont}</span>
@@ -243,7 +252,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
-          {showFontDropdown && (
+          {showFontDropdown && !isDisabled && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowFontDropdown(false)}></div>
               <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50 w-48 max-h-64 overflow-y-auto">
@@ -265,8 +274,13 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         {/* Font Size Dropdown */}
         <div className="relative">
           <button
-            onClick={() => setShowSizeDropdown(!showSizeDropdown)}
-            className="h-8 px-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex items-center gap-1 min-w-[60px] border border-gray-300 dark:border-gray-600"
+            onClick={() => !isDisabled && setShowSizeDropdown(!showSizeDropdown)}
+            disabled={isDisabled}
+            className={`h-8 px-2 text-sm rounded transition-colors flex items-center gap-1 min-w-[60px] border ${
+              isDisabled
+                ? 'text-gray-400 dark:text-gray-600 border-gray-200 dark:border-gray-700 cursor-not-allowed opacity-50'
+                : 'text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
             title="Font size"
           >
             <span>{currentFontSize}</span>
@@ -274,7 +288,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          {showSizeDropdown && (
+          {showSizeDropdown && !isDisabled && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowSizeDropdown(false)}></div>
               <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50 w-24 max-h-64 overflow-y-auto">
@@ -301,6 +315,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBold().run()}
           isActive={editor.isActive('bold')}
+          disabled={isDisabled}
           title="Bold (Ctrl+B)"
         >
           <span className="font-bold">B</span>
@@ -309,6 +324,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleItalic().run()}
           isActive={editor.isActive('italic')}
+          disabled={isDisabled}
           title="Italic (Ctrl+I)"
         >
           <span className="italic">I</span>
@@ -317,6 +333,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleUnderline().run()}
           isActive={editor.isActive('underline')}
+          disabled={isDisabled}
           title="Underline (Ctrl+U)"
         >
           <span className="underline">U</span>
@@ -327,14 +344,15 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         {/* Text Color */}
         <div className="relative">
           <ToolbarButton
-            onClick={() => setShowColorPicker(!showColorPicker)}
+            onClick={() => !isDisabled && setShowColorPicker(!showColorPicker)}
+            disabled={isDisabled}
             title="Text color"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
             </svg>
           </ToolbarButton>
-          {showColorPicker && (
+          {showColorPicker && !isDisabled && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowColorPicker(false)}></div>
               <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-3 z-50">
@@ -357,14 +375,15 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         {/* Highlight Color */}
         <div className="relative">
           <ToolbarButton
-            onClick={() => setShowHighlightPicker(!showHighlightPicker)}
+            onClick={() => !isDisabled && setShowHighlightPicker(!showHighlightPicker)}
+            disabled={isDisabled}
             title="Highlight color"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
             </svg>
           </ToolbarButton>
-          {showHighlightPicker && (
+          {showHighlightPicker && !isDisabled && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowHighlightPicker(false)}></div>
               <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-3 z-50">
@@ -390,6 +409,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         <ToolbarButton
           onClick={() => editor.chain().focus().setTextAlign('left').run()}
           isActive={editor.isActive({ textAlign: 'left' })}
+          disabled={isDisabled}
           title="Align left (Ctrl+Shift+L)"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -400,6 +420,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         <ToolbarButton
           onClick={() => editor.chain().focus().setTextAlign('center').run()}
           isActive={editor.isActive({ textAlign: 'center' })}
+          disabled={isDisabled}
           title="Align center (Ctrl+Shift+E)"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -410,6 +431,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         <ToolbarButton
           onClick={() => editor.chain().focus().setTextAlign('right').run()}
           isActive={editor.isActive({ textAlign: 'right' })}
+          disabled={isDisabled}
           title="Align right (Ctrl+Shift+R)"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -423,6 +445,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           isActive={editor.isActive('bulletList')}
+          disabled={isDisabled}
           title="Bullet list (Ctrl+Shift+8)"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -433,6 +456,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           isActive={editor.isActive('orderedList')}
+          disabled={isDisabled}
           title="Numbered list (Ctrl+Shift+7)"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -443,6 +467,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleTaskList().run()}
           isActive={editor.isActive('taskList')}
+          disabled={isDisabled}
           title="Checklist"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -456,6 +481,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         <ToolbarButton
           onClick={insertLink}
           isActive={editor.isActive('link')}
+          disabled={isDisabled}
           title="Insert link (Ctrl+K)"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -466,6 +492,7 @@ export default function EditorToolbar({ editor, currentFont = 'Arial', currentFo
         {/* Image Upload */}
         <ToolbarButton
           onClick={insertImage}
+          disabled={isDisabled}
           title="Insert image"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

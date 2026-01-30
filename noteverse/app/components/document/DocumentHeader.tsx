@@ -32,6 +32,7 @@ interface DocumentHeaderProps {
   onOpenSettings?: () => void; // Add callback for opening settings
   documentId?: string; // Add document ID for download/copy operations
   editor?: any; // Add editor instance for content export
+  isViewOnly?: boolean; // View-only mode indicator
 }
 
 export default function DocumentHeader({
@@ -42,7 +43,8 @@ export default function DocumentHeader({
   onShare,
   onOpenSettings,
   documentId,
-  editor
+  editor,
+  isViewOnly = false
 }: DocumentHeaderProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [localTitle, setLocalTitle] = useState(title);
@@ -55,7 +57,7 @@ export default function DocumentHeader({
 
   const handleTitleSubmit = () => {
     setIsEditingTitle(false);
-    if (localTitle.trim() !== title) {
+    if (!isViewOnly && localTitle.trim() !== title) {
       onTitleChange(localTitle.trim() || 'Untitled Document');
     }
   };
@@ -75,8 +77,11 @@ export default function DocumentHeader({
 
   // Get user initials
   const getInitials = (name: string) => {
+    if (!name || !name.trim()) return '?';
     return name
+      .trim()
       .split(' ')
+      .filter(n => n.length > 0)
       .map(n => n[0])
       .join('')
       .toUpperCase()
@@ -194,7 +199,7 @@ export default function DocumentHeader({
 
           {/* Document Title */}
           <div>
-            {isEditingTitle ? (
+            {isEditingTitle && !isViewOnly ? (
               <input
                 type="text"
                 value={localTitle}
@@ -212,25 +217,39 @@ export default function DocumentHeader({
               />
             ) : (
               <h1
-                onClick={() => setIsEditingTitle(true)}
-                className="text-lg font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-2 py-1 rounded transition-colors"
-                title="Click to edit title"
+                onClick={() => !isViewOnly && setIsEditingTitle(true)}
+                className={`text-lg font-semibold text-gray-900 dark:text-white px-2 py-1 rounded transition-colors ${
+                  isViewOnly ? 'cursor-default' : 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+                title={isViewOnly ? 'Viewing document' : 'Click to edit title'}
               >
                 {title}
               </h1>
             )}
             
-            {/* Save Status */}
+            {/* Save Status / View-only indicator */}
             <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 px-2">
-              {saveStatus === 'saving' && (
-                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-500"></div>
+              {isViewOnly ? (
+                <>
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  <span>Viewing</span>
+                </>
+              ) : (
+                <>
+                  {saveStatus === 'saving' && (
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-500"></div>
+                  )}
+                  {saveStatus === 'saved' && (
+                    <svg className="w-3 h-3 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  <span>{getSaveStatusText()}</span>
+                </>
               )}
-              {saveStatus === 'saved' && (
-                <svg className="w-3 h-3 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-              <span>{getSaveStatusText()}</span>
             </div>
           </div>
         </div>

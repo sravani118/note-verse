@@ -68,9 +68,11 @@ export async function GET(
     // Get collaborators from document.sharedWith array
     const sharedWith = document.sharedWith || [];
     
+    console.log('📋 Found sharedWith entries:', sharedWith.length);
+    
     // Populate user details for each shared user
     const collaborators = await Promise.all(
-      sharedWith.map(async (share: any) => {
+      sharedWith.map(async (share: any, index: number) => {
         let sharedWithUser = null;
         if (share.userId) {
           sharedWithUser = await db.collection('users').findOne({
@@ -78,7 +80,10 @@ export async function GET(
           });
         }
 
-        return {
+        const collaborator = {
+          _id: share.userId?.toString() || `share-${index}`, // Add unique ID
+          sharedWithEmail: share.email,
+          permission: share.role, // Map role to permission for frontend
           email: share.email,
           role: share.role,
           sharedAt: share.sharedAt,
@@ -89,6 +94,15 @@ export async function GET(
             email: share.email
           }
         };
+        
+        console.log('👤 Collaborator:', {
+          _id: collaborator._id,
+          email: collaborator.email,
+          role: collaborator.role,
+          hasUserId: !!share.userId
+        });
+        
+        return collaborator;
       })
     );
 

@@ -1,15 +1,16 @@
 /**
  * Reusable Dropdown Component
  * 
- * Consistent dropdown styling across the application with:
- * - Uniform height and border-radius
- * - Focus/hover states
+ * Google Docs-style dropdown with:
+ * - Clean minimal styling
+ * - Visible chevron indicator
+ * - Smooth hover states
  * - Dark mode support
- * - Disabled state styling
- * - Full accessibility
  */
 
 'use client';
+
+import { ChevronDown } from 'lucide-react';
 
 interface DropdownProps {
   value: string;
@@ -40,39 +41,52 @@ export default function Dropdown({
   'aria-label': ariaLabel
 }: DropdownProps) {
   return (
-    <select
-      id={id}
-      name={name}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      required={required}
-      aria-label={ariaLabel}
-      className={`
-        w-full px-4 py-2.5 
-        border border-gray-300 dark:border-gray-600 
-        rounded-lg
-        bg-white dark:bg-gray-700 
-        text-gray-900 dark:text-white
-        focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-        hover:border-gray-400 dark:hover:border-gray-500
-        disabled:opacity-50 disabled:cursor-not-allowed
-        transition-colors duration-200
-        outline-none
-        ${className}
-      `.trim().replace(/\s+/g, ' ')}
-    >
-      {placeholder && (
-        <option value="" disabled>
-          {placeholder}
-        </option>
-      )}
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+    <div className={`relative ${className}`}>
+      <select
+        id={id}
+        name={name}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        required={required}
+        aria-label={ariaLabel}
+        className="
+          w-full pl-3 pr-9 py-2
+          border border-gray-300 dark:border-gray-600 
+          rounded-md
+          bg-white dark:bg-gray-800 
+          text-sm text-gray-700 dark:text-gray-200
+          hover:bg-gray-50 dark:hover:bg-gray-750
+          focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent
+          disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 dark:disabled:bg-gray-900
+          transition-all duration-150
+          cursor-pointer
+          appearance-none
+        "
+      >
+        {placeholder && (
+          <option value="" disabled>
+            {placeholder}
+          </option>
+        )}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      
+      {/* Chevron Icon - Google Docs style */}
+      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+        <ChevronDown 
+          className={`w-4 h-4 ${
+            disabled 
+              ? 'text-gray-400 dark:text-gray-600' 
+              : 'text-gray-500 dark:text-gray-400'
+          }`}
+        />
+      </div>
+    </div>
   );
 }
 

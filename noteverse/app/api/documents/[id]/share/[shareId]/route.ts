@@ -30,10 +30,21 @@ export async function PATCH(
     const { id: documentId, shareId } = await params;
     const { permission } = await request.json();
 
+    console.log('🔄 PATCH share permission:', { documentId, shareId, permission });
+
     // Validate permission
     if (!permission || !['viewer', 'editor'].includes(permission)) {
       return NextResponse.json(
         { error: 'Invalid permission. Must be "viewer" or "editor"' },
+        { status: 400 }
+      );
+    }
+    
+    // Validate shareId is a valid ObjectId
+    if (!ObjectId.isValid(shareId)) {
+      console.error('❌ Invalid shareId format:', shareId);
+      return NextResponse.json(
+        { error: 'Invalid share ID format' },
         { status: 400 }
       );
     }
@@ -66,13 +77,42 @@ export async function PATCH(
       );
     }
 
-    // Update the share
-    const result = await db.collection('documentshares').updateOne(
-      { _id: new ObjectId(shareId) },
-      { $set: { permission, updatedAt: new Date() } }
+    // Update the share in sharedWith array
+    // shareId is actually the userId of the collaborator
+    let docObjectId: ObjectId;
+    if (ObjectId.isValid(documentId)) {
+      docObjectId = new ObjectId(documentId);
+    } else {
+      docObjectId = document._id;
+    }
+
+    console.log('📝 Updating share:', {
+      docObjectId: docObjectId.toString(),
+      shareUserId: shareId,
+      newPermission: permission
+    });
+
+    // First try to update by userId
+    let result = await db.collection('documents').updateOne(
+      { 
+        _id: docObjectId,
+        'sharedWith.userId': new ObjectId(shareId)
+      },
+      { 
+        $set: { 
+          'sharedWith.$.role': permission,
+          updatedAt: new Date() 
+        } 
+      }
     );
 
+    console.log('✅ Update result:', {
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount
+    });
+
     if (result.matchedCount === 0) {
+      console.error('❌ Share not found for userId:', shareId);
       return NextResponse.json({ error: 'Share not found' }, { status: 404 });
     }
 
@@ -106,6 +146,17 @@ export async function DELETE(
     const { db } = await connectToDatabase();
     const { id: documentId, shareId } = await params;
 
+    console.log('🗑️ DELETE share:', { documentId, shareId });
+    
+    // Validate shareId is a valid ObjectId
+    if (!ObjectId.isValid(shareId)) {
+      console.error('❌ Invalid shareId format:', shareId);
+      return NextResponse.json(
+        { error: 'Invalid share ID format' },
+        { status: 400 }
+      );
+    }
+
     // Find document and check ownership
     let document;
     if (ObjectId.isValid(documentId)) {
@@ -134,13 +185,31 @@ export async function DELETE(
       );
     }
 
-    // Delete the share
-    const result = await db.collection('documentshares').deleteOne({
-      _id: new ObjectId(shareId)
-    });
+    // Remove from sharedWith array
+    // shareId is actually the userId of the collaborator
+    let docObjectId: ObjectId;
+    if (ObjectId.isValid(documentId)) {
+      docObjectId = new ObjectId(documentId);
+    } else {
+      docObjectId = document._id;
+    }
 
-    if (result.deletedCount === 0) {
-      return NextResponse.json({ error: 'Share not found' }, { status: 404 });
+    const result = await db.collection('documents').updateOne(
+      { _id: docObjectId },
+      {
+        $pull: {
+          sharedWith: {
+            userId: new ObjectId(shareId)
+          }
+        } as any,
+        $set: {
+          updatedAt: new Date()
+        }
+      }
+    );
+
+    if (result.modifiedCount === 0) {
+      return NextResponse.json({ error: 'Share not found or already removed' }, { status: 404 });
     }
 
     return NextResponse.json({
