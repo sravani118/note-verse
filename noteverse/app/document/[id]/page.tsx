@@ -269,7 +269,20 @@ export default function DocumentPage() {
       if (response.ok) {
         const data = await response.json();
         console.log('✅ Fetched chat messages:', data.messages?.length || 0, 'messages');
-        setChatMessages(data.messages || []);
+        
+        // Convert timestamp strings to Date objects
+        const messagesWithDates = (data.messages || []).map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }));
+        
+        // Deduplicate messages by ID before setting state
+        const uniqueMessages = messagesWithDates.filter((msg: any, index: number, self: any[]) => 
+          index === self.findIndex((m: any) => m.id === msg.id)
+        );
+        
+        console.log('✨ After deduplication:', uniqueMessages.length, 'unique messages');
+        setChatMessages(uniqueMessages);
       } else {
         // Read response body once as text first
         const responseText = await response.text();
@@ -381,9 +394,28 @@ export default function DocumentPage() {
       console.log('  - Timestamp (converted):', formattedMessage.timestamp);
       console.log('  - Is valid date:', !isNaN(formattedMessage.timestamp.getTime()));
       
+      // Skip if this message is from the current user (already added optimistically)
+      if (message.senderId === currentUser.id) {
+        console.log('⏭️ Skipping own message (already added optimistically)');
+        return;
+      }
+      
       console.log('💾 Updating chat messages state...');
       setChatMessages((prev) => {
         console.log(`  - Previous message count: ${prev.length}`);
+        
+        // Check for duplicate messages (by ID or by timestamp+sender combination)
+        const isDuplicate = prev.some(msg => 
+          msg.id === message.id || 
+          (msg.senderId === message.senderId && 
+           msg.timestamp?.getTime() === formattedMessage.timestamp?.getTime())
+        );
+        
+        if (isDuplicate) {
+          console.log('⏭️ Skipping duplicate message');
+          return prev;
+        }
+        
         const newMessages = [...prev, formattedMessage];
         console.log(`  - New message count: ${newMessages.length}`);
         console.log('✅ State updated! Message should now appear in UI.');
@@ -421,8 +453,23 @@ export default function DocumentPage() {
     console.log('  - Document ID:', documentId);
     console.log('  - Current user:', currentUser.name, currentUser.id);
 
+    // Create optimistic message object
+    const optimisticMessage = {
+      id: `temp-${Date.now()}`, // Temporary ID
+      message: message.trim(),
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderEmail: currentUser.email || session?.user?.email || '',
+      timestamp: new Date(),
+      documentId
+    };
+
+    // Immediately add to local state (optimistic update)
+    console.log('⚡ Adding message optimistically to state');
+    setChatMessages(prev => [...prev, optimisticMessage]);
+
     try {
-      // Emit via Socket.io for real-time delivery
+      // Emit via Socket.io for real-time delivery to others
       socket.emit('send-chat-message', {
         documentId,
         message: message.trim()
@@ -441,17 +488,42 @@ export default function DocumentPage() {
         const error = await response.json();
         console.error('Failed to save chat message:', error.error || error);
         
+        // Remove optimistic message on error
+        setChatMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id));
+        
         // Show user-friendly error if permission denied
         if (response.status === 403) {
           toast.error('You do not have permission to send messages. Only editors and owners can send messages.', { duration: 5000 });
         } else {
-          console.warn('⚠️ Message sent via Socket.io but not saved to database');
+          toast.error('Failed to send message');
         }
       } else {
-        console.log('✅ Chat message saved to database');
+        const data = await response.json();
+        console.log('✅ Chat message saved to database:', data);
+        
+        // Replace optimistic message with real one from server (if it has an ID)
+        if (data.message && data.message.id) {
+          setChatMessages(prev => {
+            // Remove optimistic message and add real one, avoiding duplicates
+            const withoutOptimistic = prev.filter(msg => msg.id !== optimisticMessage.id);
+            const alreadyExists = withoutOptimistic.some(msg => msg.id === data.message.id);
+            
+            if (alreadyExists) {
+              return withoutOptimistic;
+            }
+            
+            return [...withoutOptimistic, { 
+              ...data.message, 
+              timestamp: new Date(data.message.timestamp) 
+            }];
+          });
+        }
       }
     } catch (error) {
       console.error('Error sending chat message:', error);
+      // Remove optimistic message on error
+      setChatMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id));
+      toast.error('Failed to send message');
     }
   };
 
